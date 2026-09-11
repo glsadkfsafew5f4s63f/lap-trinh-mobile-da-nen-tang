@@ -1,6 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const db = require('./common/db');
 
 const app = express();
 
@@ -9,13 +10,18 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 app.get('/health', (req, res) => {
-    res.json({ success: true, message: 'Backend cửa hàng quần áo đang hoạt động' });
+    db.query('SELECT 1 AS ok')
+        .then(() => res.json({ success: true, database: process.env.DB_NAME || 'AppBanQuanAo' }))
+        .catch((error) => {
+            console.error(error.message);
+            res.status(503).json({ success: false, message: 'Không kết nối được MySQL' });
+        });
 });
 
 app.use('/api/auth', require('./routes/auth.route'));
-app.use('/api/products', require('./routes/product.route'));
-app.use('/api/cart', require('./routes/cart.route'));
-app.use('/api/orders', require('./routes/order.route'));
+app.use('/api/products', require('./routes/sanpham.route'));
+app.use('/api/cart', require('./routes/giohang.route'));
+app.use('/api/orders', require('./routes/donhang.route'));
 
 app.use('/api/bienthesanpham', require('./routes/bienthesanpham.route'));
 app.use('/api/danhgia', require('./routes/danhgia.route'));
