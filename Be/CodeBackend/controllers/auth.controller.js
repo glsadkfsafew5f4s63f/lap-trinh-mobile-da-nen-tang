@@ -11,6 +11,8 @@ function toUser(row) {
         name: row.HoTen,
         phone: row.SoDienThoai,
         email: row.Email,
+        roleId: row.MaVaiTro,
+        role: row.TenVaiTro,
         address: ''
     };
 }
@@ -56,11 +58,16 @@ exports.register = async (req, res) => {
 
 exports.login = async (req, res) => {
     try {
-        const phone = normalizePhone(req.body.phone);
+        const identifier = String(req.body.identifier || req.body.phone || '').trim();
         const password = String(req.body.password || '');
         const [rows] = await db.query(
-            'SELECT * FROM NguoiDung WHERE SoDienThoai = ? AND TrangThai = 1 LIMIT 1',
-            [phone]
+            `SELECT nguoidung.*, vaitro.TenVaiTro
+             FROM NguoiDung nguoidung
+             INNER JOIN VaiTro vaitro ON vaitro.MaVaiTro = nguoidung.MaVaiTro
+             WHERE (nguoidung.Email = ? OR nguoidung.SoDienThoai = ? OR nguoidung.HoTen = ?)
+               AND nguoidung.TrangThai = 1
+             LIMIT 1`,
+            [identifier, normalizePhone(identifier), identifier]
         );
         const account = rows[0];
 

@@ -406,6 +406,9 @@ CREATE TABLE DanhGia (
 
     SoSao INT NOT NULL,
     NoiDung TEXT,
+    TrangThai VARCHAR(20) NOT NULL DEFAULT 'DaDuyet',
+    PhanHoi TEXT,
+    NgayPhanHoi DATETIME,
 
     NgayDanhGia DATETIME DEFAULT CURRENT_TIMESTAMP,
 
@@ -429,6 +432,26 @@ CREATE TABLE DanhGia (
 
     CONSTRAINT CK_DanhGia_SoSao
         CHECK (SoSao BETWEEN 1 AND 5)
+) ENGINE=InnoDB;
+
+
+-- =========================================================
+-- 18. BẢNG TIN NHẮN TƯ VẤN
+-- =========================================================
+
+CREATE TABLE TinNhan (
+    MaTinNhan INT AUTO_INCREMENT PRIMARY KEY,
+    MaNguoiDung INT NOT NULL,
+    NguoiGui ENUM('NguoiDung', 'Admin') NOT NULL,
+    NoiDung TEXT NOT NULL,
+    DaDoc TINYINT(1) NOT NULL DEFAULT 0,
+    NgayGui DATETIME DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT FK_TinNhan_NguoiDung
+        FOREIGN KEY (MaNguoiDung)
+        REFERENCES NguoiDung(MaNguoiDung)
+        ON UPDATE CASCADE
+        ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
 
@@ -462,10 +485,10 @@ INSERT INTO NguoiDung
 VALUES
 (
     1,
-    'Quản trị viên',
-    'admin@gmail.com',
+    'admin',
+    'admin',
     '0900000000',
-    '123456',
+    '123',
     1
 ),
 (

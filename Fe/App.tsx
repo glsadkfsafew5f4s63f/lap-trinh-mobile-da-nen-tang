@@ -18,6 +18,7 @@ import { ReviewProvider } from './context/ReviewContext';
 import AccountInfoScreen from './screens/AccountInfoScreen';
 import AddressScreen from './screens/AddressScreen';
 import CartScreen from './screens/CartScreen';
+import ChatScreen from './screens/ChatScreen';
 import CategoryScreen from './screens/CategoryScreen';
 import CheckoutScreen from './screens/CheckoutScreen';
 import FavoriteScreen from './screens/FavoriteScreen';
@@ -103,6 +104,16 @@ function MainTabs() {
           title: 'Cá nhân',
           tabBarIcon: ({ color, focused, size }) => (
             <Ionicons name={focused ? 'person' : 'person-outline'} size={size} color={color} />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="Chat"
+        component={ChatScreen}
+        options={{
+          title: 'Tư vấn',
+          tabBarIcon: ({ color, focused, size }) => (
+            <Ionicons name={focused ? 'chatbubbles' : 'chatbubbles-outline'} size={size} color={color} />
           ),
         }}
       />

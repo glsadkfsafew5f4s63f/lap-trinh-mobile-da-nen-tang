@@ -1,4 +1,5 @@
 const Donhang = require('../models/donhang.model');
+const realtime = require('../common/realtime');
 
 exports.getAll = async (req, res) => {
     try {
@@ -46,8 +47,21 @@ exports.checkout = async (req, res) => {
 
 exports.update = async (req, res) => {
     try {
+        const current = await Donhang.getById(req.params.id);
+        if (!current) return res.status(404).json({ success: false, message: 'Không tìm thấy đơn hàng' });
+        if (current.TrangThai === 'DaGiao') {
+            return res.status(409).json({ success: false, message: 'Đơn hàng đã giao thành công và không thể chỉnh sửa.' });
+        }
+        if (['DangGiao', 'DaGiao'].includes(req.body.TrangThai)
+            && !['DaCoc', 'DaThanhToan'].includes(current.TrangThaiThanhToan)) {
+            return res.status(409).json({ success: false, message: 'Chưa thể giao hàng khi chưa xác nhận tiền cọc.' });
+        }
         const result = await Donhang.update(req.params.id, req.body);
         if (!result.affectedRows) return res.status(404).json({ success: false, message: 'Không tìm thấy dữ liệu' });
+        const updatedOrder = await Donhang.getById(req.params.id);
+        if (updatedOrder?.TrangThai === 'DaGiao') {
+            realtime.broadcast({ type: 'order.delivered', order: updatedOrder });
+        }
         res.json({ success: true, message: 'Cập nhật thành công', data: result });
     } catch (error) {
         res.status(400).json({ success: false, message: error.message });
@@ -56,6 +70,11 @@ exports.update = async (req, res) => {
 
 exports.remove = async (req, res) => {
     try {
+        const current = await Donhang.getById(req.params.id);
+        if (!current) return res.status(404).json({ success: false, message: 'Không tìm thấy đơn hàng' });
+        if (current.TrangThai === 'DaGiao') {
+            return res.status(409).json({ success: false, message: 'Đơn hàng đã giao thành công và không thể xóa.' });
+        }
         const result = await Donhang.delete(req.params.id);
         if (!result.affectedRows) return res.status(404).json({ success: false, message: 'Không tìm thấy dữ liệu' });
         res.json({ success: true, message: 'Xóa thành công' });

@@ -6,6 +6,7 @@ export type MainTabParamList = {
   Favorite: undefined;
   Cart: undefined;
   Profile: undefined;
+  Chat: undefined;
 };
 
 export type RootStackParamList = {

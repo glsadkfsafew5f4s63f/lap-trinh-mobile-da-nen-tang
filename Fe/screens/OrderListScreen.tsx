@@ -1,6 +1,7 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Image } from 'expo-image';
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef } from 'react';
+import { Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { EmptyState } from '../components/EmptyState';
 import { colors, radius } from '../constants/theme';
@@ -21,6 +22,37 @@ function statusColor(status: OrderStatus) {
 
 export default function OrderListScreen({ navigation }: Props) {
   const { orders } = useOrders();
+  const promptedReviews = useRef(new Set<string>());
+
+  useEffect(() => {
+    const reviewTarget = orders
+      .filter((order) => order.status === 'Đã giao')
+      .flatMap((order) => order.items
+        .filter((item) => !order.reviewedProductIds.includes(item.productId))
+        .map((item) => ({ order, item })))
+      .find(({ order, item }) => {
+        const key = `${order.id}-${item.productId}`;
+        return !promptedReviews.current.has(key);
+      });
+
+    if (!reviewTarget) return;
+    const key = `${reviewTarget.order.id}-${reviewTarget.item.productId}`;
+    promptedReviews.current.add(key);
+    Alert.alert(
+      'Đơn hàng đã giao thành công',
+      'Bạn có muốn đánh giá và bình luận về sản phẩm vừa nhận không?',
+      [
+        { text: 'Bỏ qua', style: 'cancel' },
+        {
+          text: 'Đánh giá ngay',
+          onPress: () => navigation.navigate('ProductReview', {
+            orderId: reviewTarget.order.id,
+            productId: reviewTarget.item.productId,
+          }),
+        },
+      ]
+    );
+  }, [navigation, orders]);
 
   if (orders.length === 0) {
     return (

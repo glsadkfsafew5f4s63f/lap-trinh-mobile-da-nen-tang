@@ -9,6 +9,7 @@ export type ProductReview = {
   stars: number;
   comment: string;
   date: string;
+  reply?: string;
 };
 
 type ReviewContextValue = {
@@ -40,6 +41,7 @@ export function ReviewProvider({ children }: { children: ReactNode }) {
             stars: Number(row.stars),
             comment: row.comment,
             date: row.date ? new Date(row.date).toLocaleDateString('vi-VN') : '',
+            reply: row.reply || '',
           }));
           setReviewsByUser((allUsers) => ({ ...allUsers, [userKey]: remoteReviews }));
         } catch {

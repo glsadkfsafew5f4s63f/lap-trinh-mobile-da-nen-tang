@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Image } from 'expo-image';
 import { useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { AppButton } from '../components/AppButton';
 import { AppInput } from '../components/AppInput';
@@ -23,12 +23,14 @@ export default function CheckoutScreen({ navigation }: Props) {
   const [name, setName] = useState(user?.name || defaultAddress.name);
   const [phone, setPhone] = useState(user?.phone || defaultAddress.phone);
   const [address, setAddress] = useState(user?.address || defaultAddress.address);
+  const [paymentVisible, setPaymentVisible] = useState(false);
+  const [pendingOrderId, setPendingOrderId] = useState<string | null>(null);
   const shippingFee = 30000;
   const grandTotal = total + shippingFee;
   const deposit = Math.round(grandTotal * 0.2);
   const remaining = grandTotal - deposit;
 
-  function placeOrder() {
+  async function placeOrder() {
     if (items.length === 0) {
       Alert.alert('Giỏ hàng trống', 'Hãy thêm sản phẩm trước khi đặt hàng.');
       return;
@@ -38,39 +40,32 @@ export default function CheckoutScreen({ navigation }: Props) {
       return;
     }
 
-    const order = addOrder({
-      name: name.trim(),
-      phone: phone.trim(),
-      address: address.trim(),
-      items: items.map((item) => ({
-        productId: item.id,
-          variantId: item.variantId ?? 0,
+    try {
+      const order = await addOrder({
+        name: name.trim(),
+        phone: phone.trim(),
+        address: address.trim(),
+        items: items.map((item) => ({
+          productId: item.id,
+          variantId: item.variantId,
           sku: item.sku,
-                colorIndex: item.colorIndex,
-                sizeIndex: item.sizeIndex,
+          colorIndex: item.colorIndex,
+          sizeIndex: item.sizeIndex,
           color: item.colors[item.colorIndex]?.name ?? '',
           size: item.sizes[item.sizeIndex] ?? '',
           name: item.name,
-        quantity: item.quantity,
-        price: item.price,
-      })),
-      deposit,
-      remaining,
-    });
+          quantity: item.quantity,
+          price: item.price,
+        })),
+        deposit,
+        remaining,
+      });
 
-    Alert.alert(
-      'Đặt hàng thành công',
-      `Mã đơn ${order.id}\nĐã cọc 20%: ${formatPrice(deposit)}\nCòn lại khi nhận hàng: ${formatPrice(remaining)}`,
-      [
-        {
-          text: 'OK',
-          onPress: () => {
-            clear();
-            navigation.navigate('MainTabs', { screen: 'Profile' });
-          },
-        },
-      ]
-    );
+      setPendingOrderId(order.id);
+      setPaymentVisible(true);
+    } catch (error) {
+      Alert.alert('Không thể đặt hàng', error instanceof Error ? error.message : 'Đơn hàng chưa được lưu.');
+    }
   }
 
   return (
@@ -140,17 +135,52 @@ export default function CheckoutScreen({ navigation }: Props) {
       <View style={[styles.card, styles.payment]}>
         <Ionicons name="radio-button-on" size={20} color={colors.accent} />
         <View>
-          <Text style={styles.bold}>Cọc 20% + thanh toán phần còn lại khi nhận hàng</Text>
+          <Text style={styles.bold}>Cọc 20% qua QR + thanh toán phần còn lại khi nhận hàng</Text>
           <Text style={styles.hint}>Cọc ngay {formatPrice(deposit)}, nhận hàng thanh toán {formatPrice(remaining)}</Text>
         </View>
       </View>
 
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
       <AppButton
-        label={isOrderLoading || isLoading ? 'ĐANG XỬ LÝ...' : 'ĐẶT HÀNG COD'}
+        label={isOrderLoading || isLoading ? 'ĐANG XỬ LÝ...' : 'TẠO ĐƠN VÀ THANH TOÁN CỌC'}
         onPress={placeOrder}
         disabled={isOrderLoading || isLoading}
       />
+
+      <Modal visible={paymentVisible} animationType="slide" transparent onRequestClose={() => setPaymentVisible(false)}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.paymentModal}>
+            <Text style={styles.modalTitle}>Thanh toán tiền cọc</Text>
+            <Text style={styles.modalHint}>Quét mã QR bằng ứng dụng ngân hàng của bạn</Text>
+            <Image
+              source={{
+                uri: `https://img.vietqr.io/image/MB-0868087112-compact2.png?amount=${deposit}&addInfo=${encodeURIComponent(`COC ${pendingOrderId ?? ''}`)}&accountName=NGUYEN%20VAN%20AN`,
+              }}
+              style={styles.qr}
+              contentFit="contain"
+            />
+            <View style={styles.transferDetails}>
+              <Text style={styles.transferLine}>Ngân hàng: <Text style={styles.bold}>MB Bank</Text></Text>
+              <Text style={styles.transferLine}>Số tài khoản: <Text style={styles.bold}>0868087112</Text></Text>
+              <Text style={styles.transferLine}>Chủ tài khoản: <Text style={styles.bold}>NGUYEN VAN AN</Text></Text>
+              <Text style={styles.transferLine}>Số tiền cọc: <Text style={styles.depositValue}>{formatPrice(deposit)}</Text></Text>
+              <Text style={styles.transferLine}>Nội dung: <Text style={styles.bold}>COC {pendingOrderId}</Text></Text>
+            </View>
+            <Text style={styles.verificationHint}>Đơn hàng sẽ được giao sau khi cửa hàng kiểm tra giao dịch.</Text>
+            <AppButton
+              label="TÔI ĐÃ CHUYỂN KHOẢN"
+              onPress={() => {
+                setPaymentVisible(false);
+                clear();
+                navigation.navigate('MainTabs', { screen: 'Profile' });
+              }}
+            />
+            <Pressable onPress={() => setPaymentVisible(false)} style={styles.cancelPayment}>
+              <Text style={styles.cancelPaymentText}>Để tôi thanh toán sau</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -247,5 +277,57 @@ const styles = StyleSheet.create({
     color: '#b42318',
     marginBottom: 12,
     fontSize: 13,
+  },
+  modalBackdrop: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(15, 23, 42, 0.45)',
+  },
+  paymentModal: {
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 20,
+    alignItems: 'center',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: colors.ink,
+  },
+  modalHint: {
+    color: colors.muted,
+    marginTop: 4,
+    marginBottom: 12,
+  },
+  qr: {
+    width: 250,
+    height: 250,
+    backgroundColor: '#fff',
+  },
+  transferDetails: {
+    width: '100%',
+    padding: 14,
+    marginVertical: 14,
+    borderRadius: radius.md,
+    backgroundColor: colors.bg,
+    gap: 5,
+  },
+  transferLine: {
+    color: colors.ink,
+    fontSize: 13,
+  },
+  verificationHint: {
+    color: colors.muted,
+    fontSize: 12,
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  cancelPayment: {
+    padding: 12,
+  },
+  cancelPaymentText: {
+    color: colors.muted,
+    fontWeight: '600',
   },
 });
