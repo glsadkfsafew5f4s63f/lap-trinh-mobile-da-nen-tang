@@ -6,9 +6,12 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { ActivityIndicator, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { useEffect, useState } from 'react';
 
 import { colors } from './constants/theme';
+import { loadProductsFromApi } from './data/products';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { CartProvider, useCart } from './context/CartContext';
 import { FavoriteProvider } from './context/FavoriteContext';
@@ -110,6 +113,22 @@ function MainTabs() {
 }
 
 export default function App() {
+  const [catalogReady, setCatalogReady] = useState(false);
+
+  useEffect(() => {
+    loadProductsFromApi()
+      .catch((error) => console.warn('Không thể tải catalog từ backend, dùng dữ liệu dự phòng.', error))
+      .finally(() => setCatalogReady(true));
+  }, []);
+
+  if (!catalogReady) {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg }}>
+        <ActivityIndicator color={colors.ink} />
+      </View>
+    );
+  }
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>

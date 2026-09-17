@@ -2,6 +2,42 @@ const Sanpham = {};
 
 const db = require('../common/db');
 
+Sanpham.getCatalog = async () => {
+    const [rows] = await db.query(`
+        SELECT
+            sp.MaSanPham AS id,
+            sp.TenSanPham AS name,
+            sp.MoTa AS description,
+            sp.Gia AS price,
+            sp.GiaCu AS oldPrice,
+            sp.SanPhamMoi AS isNew,
+            sp.NoiBat AS isFeatured,
+            dm.TenDanhMuc AS category,
+            th.TenThuongHieu AS brand,
+            COALESCE(
+                JSON_ARRAYAGG(
+                    CASE
+                        WHEN ha.MaHinhAnh IS NULL THEN NULL
+                        ELSE JSON_OBJECT(
+                            'url', ha.DuongDanAnh,
+                            'isPrimary', ha.AnhChinh,
+                            'order', ha.ThuTu
+                        )
+                    END
+                ),
+                JSON_ARRAY()
+            ) AS images
+        FROM SanPham sp
+        JOIN DanhMuc dm ON dm.MaDanhMuc = sp.MaDanhMuc
+        LEFT JOIN ThuongHieu th ON th.MaThuongHieu = sp.MaThuongHieu
+        LEFT JOIN HinhAnhSanPham ha ON ha.MaSanPham = sp.MaSanPham
+        WHERE sp.TrangThai = 1
+        GROUP BY sp.MaSanPham
+        ORDER BY sp.MaSanPham
+    `);
+    return rows;
+};
+
 Sanpham.getAll = async () => {
     const [rows] = await db.query('SELECT * FROM `sanpham`');
     return rows;

@@ -1,3 +1,5 @@
+import { API_BASE_URL, getApiProductImages, getApiProductVariants, getApiProducts } from '../services/api';
+
 const p = (id: string, w = 900) =>
   `https://images.pexels.com/photos/${id}/pexels-photo-${id}.jpeg?auto=compress&cs=tinysrgb&w=${w}`;
 
@@ -810,6 +812,105 @@ export const products: Product[] = [
     isFeatured: false,
   }),
 ];
+
+function resolveImageUrl(value: string) {
+  if (/^https?:\/\//i.test(value)) {
+    return value;
+  }
+  return `${API_BASE_URL}/${value.replace(/^\/+/, '')}`;
+}
+
+function parseApiImages(value: unknown): Product['images'] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .filter((item): item is { url?: string } => Boolean(item && typeof item === 'object'))
+    .map((item) => item.url)
+    .filter((url): url is string => Boolean(url))
+    .map(resolveImageUrl);
+}
+
+export async function loadProductsFromApi() {
+  const [apiProducts, imageResponse] = await Promise.all([
+    getApiProducts(),
+    getApiProductImages(),
+  ]);
+  const apiVariants = await Promise.all(
+    apiProducts.map(async (apiProduct) => ({
+      productId: apiProduct.id,
+      variants: await getApiProductVariants(apiProduct.id),
+    })),
+  );
+  const variantsByProduct = new Map(apiVariants.map((item) => [item.productId, item.variants]));
+  const imagesByProduct = new Map<number, string[]>();
+
+  for (const image of imageResponse.data ?? []) {
+    const current = imagesByProduct.get(image.MaSanPham) ?? [];
+    current.push(resolveImageUrl(image.DuongDanAnh));
+    imagesByProduct.set(image.MaSanPham, current);
+  }
+
+  const localProducts = [...products];
+  const nextProducts = apiProducts.map((apiProduct) => {
+    const localProduct = localProducts.find(
+      (item) => item.sqlId === apiProduct.id || item.id === String(apiProduct.id),
+    );
+    const images = imagesByProduct.get(apiProduct.id)?.filter(Boolean)
+      ?? parseApiImages(apiProduct.images);
+    const resolvedImages = images.length > 0 ? images : localProduct?.images ?? [];
+    const apiProductVariants = variantsByProduct.get(apiProduct.id) ?? [];
+    const colorNames = Array.from(new Set(apiProductVariants.map((variant) => variant.color)));
+    const sizeNames = Array.from(new Set(apiProductVariants.map((variant) => variant.size)));
+    const colors = colorNames.map((name) => ({
+      name,
+      hex: apiProductVariants.find((variant) => variant.color === name)?.hex || '#808080',
+    }));
+    const variants = apiProductVariants.map((variant) => ({
+      id: variant.id,
+      color: variant.color,
+      size: variant.size,
+      sku: variant.sku,
+      price: Number(variant.price) || Number(apiProduct.price) || 0,
+      stock: Number(variant.stock) || 0,
+    }));
+    const stockByVariant = colors.map((color) => sizeNames.map((size) => (
+      variants.find((variant) => variant.color === color.name && variant.size === size)?.stock ?? 0
+    )));
+
+    return {
+      ...(localProduct ?? {
+        id: String(apiProduct.id),
+        colors: [],
+        sizes: [],
+        stockByVariant: [],
+        variants: [],
+        rating: 0,
+        reviewCount: 0,
+      }),
+      id: String(apiProduct.id),
+      sqlId: apiProduct.id,
+      name: apiProduct.name,
+      description: apiProduct.description ?? localProduct?.description ?? '',
+      price: Number(apiProduct.price) || localProduct?.price || 0,
+      oldPrice: apiProduct.oldPrice == null ? localProduct?.oldPrice : Number(apiProduct.oldPrice),
+      category: apiProduct.category || localProduct?.category || 'Chưa phân loại',
+      brand: apiProduct.brand || localProduct?.brand || 'FASHION',
+      image: resolvedImages[0] ?? '',
+      images: resolvedImages,
+      colors: colors.length > 0 ? colors : localProduct?.colors ?? [],
+      sizes: sizeNames.length > 0 ? sizeNames : localProduct?.sizes ?? [],
+      variants: variants.length > 0 ? variants : localProduct?.variants ?? [],
+      stockByVariant: stockByVariant.length > 0 ? stockByVariant : localProduct?.stockByVariant ?? [],
+      isNew: Boolean(apiProduct.isNew),
+      isFeatured: Boolean(apiProduct.isFeatured),
+    } satisfies Product;
+  });
+
+  if (nextProducts.length > 0) {
+    products.splice(0, products.length, ...nextProducts);
+  }
+}
 
 export const favoriteIds = ['1', '5', '6'];
 

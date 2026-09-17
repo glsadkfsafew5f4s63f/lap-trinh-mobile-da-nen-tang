@@ -1,4 +1,5 @@
 export type ApiProductImage = {
+  productId?: number;
   url: string;
   isPrimary: number;
   order: number;
@@ -59,6 +60,15 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 
 export function getApiProducts() {
   return request<ApiProduct[]>('/api/products');
+}
+
+export function getApiProductImages() {
+  return request<{ success: boolean; data?: Array<{
+    MaSanPham: number;
+    DuongDanAnh: string;
+    AnhChinh: number;
+    ThuTu: number;
+  }> }>('/api/hinhanhsanpham');
 }
 
 export function getApiProductVariants(productId: number) {

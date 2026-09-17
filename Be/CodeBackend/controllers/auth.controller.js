@@ -11,6 +11,8 @@ function toUser(row) {
         name: row.HoTen,
         phone: row.SoDienThoai,
         email: row.Email,
+        roleId: row.MaVaiTro,
+        role: row.TenVaiTro || (Number(row.MaVaiTro) === 1 ? 'Admin' : 'KhachHang'),
         address: ''
     };
 }
@@ -45,7 +47,9 @@ exports.register = async (req, res) => {
         );
 
         const [rows] = await db.query(
-            'SELECT MaNguoiDung, HoTen, Email, SoDienThoai FROM NguoiDung WHERE MaNguoiDung = ?',
+            `SELECT nd.MaNguoiDung, nd.MaVaiTro, nd.HoTen, nd.Email, nd.SoDienThoai, vt.TenVaiTro
+             FROM NguoiDung nd LEFT JOIN VaiTro vt ON vt.MaVaiTro = nd.MaVaiTro
+             WHERE nd.MaNguoiDung = ?`,
             [result.insertId]
         );
         res.status(201).json({ success: true, data: toUser(rows[0]) });
@@ -56,11 +60,14 @@ exports.register = async (req, res) => {
 
 exports.login = async (req, res) => {
     try {
-        const phone = normalizePhone(req.body.phone);
+        const identifier = String(req.body.identifier || req.body.email || req.body.phone || '').trim();
+        const phone = normalizePhone(identifier);
         const password = String(req.body.password || '');
         const [rows] = await db.query(
-            'SELECT * FROM NguoiDung WHERE SoDienThoai = ? AND TrangThai = 1 LIMIT 1',
-            [phone]
+            `SELECT nd.*, vt.TenVaiTro
+             FROM NguoiDung nd LEFT JOIN VaiTro vt ON vt.MaVaiTro = nd.MaVaiTro
+             WHERE (nd.SoDienThoai = ? OR nd.Email = ?) AND nd.TrangThai = 1 LIMIT 1`,
+            [phone, identifier]
         );
         const account = rows[0];
 
