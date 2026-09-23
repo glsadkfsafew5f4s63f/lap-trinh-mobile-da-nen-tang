@@ -6,6 +6,7 @@ const cors = require('cors');
 const { WebSocketServer } = require('ws');
 const db = require('./common/db');
 const realtime = require('./common/realtime');
+const { requireAdmin } = require('./middleware/auth');
 
 const app = express();
 
@@ -78,7 +79,7 @@ app.use('/api/auth', require('./routes/auth.route'));
 app.use('/api/products', require('./routes/sanpham.route'));
 app.use('/api/cart', require('./routes/giohang.route'));
 app.use('/api/orders', require('./routes/donhang.route'));
-app.use('/api/donhang', require('./routes/donhang.route'));
+app.use('/api/donhang', requireAdmin, require('./routes/donhang.route'));
 app.use('/api/nguoidung', require('./routes/nguoidung.route'));
 
 app.use('/api/bienthesanpham', require('./routes/bienthesanpham.route'));
@@ -88,7 +89,7 @@ app.use('/api/diachi', require('./routes/diachi.route'));
 app.use('/api/hinhanhsanpham', require('./routes/hinhanhsanpham.route'));
 app.use('/api/kichthuoc', require('./routes/kichthuoc.route'));
 app.use('/api/mausac', require('./routes/mausac.route'));
-app.use('/api/sanpham', require('./routes/sanpham.route'));
+app.use('/api/sanpham', requireAdmin, require('./routes/sanpham.route'));
 app.use('/api/thuonghieu', require('./routes/thuonghieu.route'));
 app.use('/api/vaitro', require('./routes/vaitro.route'));
 app.use('/api/yeuthich', require('./routes/yeuthich.route'));

@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from 'react';
 
 import { User } from '../data/user';
-import { loginApiUser, registerApiUser } from '../services/api';
+import { AUTH_TOKEN_STORAGE_KEY, loginApiUser, registerApiUser } from '../services/api';
 
 type AuthContextValue = {
   user: User | null;
@@ -36,18 +36,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let isMounted = true;
 
-    AsyncStorage.getItem(AUTH_STORAGE_KEY)
-      .then((storedUser) => {
+    Promise.all([
+      AsyncStorage.getItem(AUTH_STORAGE_KEY),
+      AsyncStorage.getItem(AUTH_TOKEN_STORAGE_KEY),
+    ])
+      .then(([storedUser, storedToken]) => {
         if (!isMounted) {
           return;
         }
 
-        if (storedUser) {
+        if (storedUser && storedToken) {
           try {
             setUser(JSON.parse(storedUser) as User);
           } catch {
             setUser(null);
           }
+        } else {
+          setUser(null);
+          void AsyncStorage.multiRemove([AUTH_STORAGE_KEY, AUTH_TOKEN_STORAGE_KEY]);
         }
       })
       .catch(() => undefined)
@@ -76,6 +82,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         try {
           const response = await loginApiUser(normalizedPhone, password);
+          await AsyncStorage.setItem(AUTH_TOKEN_STORAGE_KEY, response.token);
           setUser(response.data);
           await persistUser(response.data);
           return null;
@@ -93,6 +100,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         try {
           const response = await registerApiUser(name.trim(), normalizedPhone, password);
+          await AsyncStorage.setItem(AUTH_TOKEN_STORAGE_KEY, response.token);
           setUser(response.data);
           await persistUser(response.data);
           return null;
@@ -102,6 +110,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       logout() {
         setUser(null);
+        void AsyncStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
         persistUser(null);
       },
       updateUser(data: Partial<User>) {

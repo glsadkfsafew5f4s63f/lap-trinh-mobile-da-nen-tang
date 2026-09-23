@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import './App.css'
+import { API_BASE_URL, fetchJson, requestJson } from './services/api'
 
 type TabKey = 'overview' | 'products' | 'orders' | 'customers' | 'reviews' | 'chat'
 
@@ -78,8 +79,6 @@ type ChatMessage = {
   message: string
   date: string
 }
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:7000'
 
 const navItems = [
   { key: 'overview', label: 'Tổng quan', icon: '▣' },
@@ -185,29 +184,6 @@ const normalizeReview = (item: any): Review => {
   return { id: String(id), name, product, rating: Math.max(1, Math.min(5, rating)), text, status, reply, media }
 }
 
-async function fetchJson<T>(endpoint: string): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${endpoint}`)
-  if (!response.ok) {
-    throw new Error(`Request failed: ${response.status}`)
-  }
-  return response.json() as Promise<T>
-}
-
-async function requestJson<T>(endpoint: string, options: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(options.headers || {}),
-    },
-  })
-  const body = await response.json().catch(() => ({}))
-  if (!response.ok || body.success === false) {
-    throw new Error(body.message || `Request failed: ${response.status}`)
-  }
-  return body as T
-}
-
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(() => {
     return Boolean(localStorage.getItem('admin-user'))
@@ -235,6 +211,7 @@ function App() {
   const [chatConversations, setChatConversations] = useState<ChatConversation[]>([])
   const [selectedConversation, setSelectedConversation] = useState<ChatConversation | null>(null)
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
+  const [notifications, setNotifications] = useState<Array<{ id: number; text: string }>>([])
   const [chatText, setChatText] = useState('')
   const [reviewPage, setReviewPage] = useState(1)
   const [reviewSearch, setReviewSearch] = useState('')
@@ -367,14 +344,22 @@ function App() {
   useEffect(() => {
     const socket = new WebSocket(`${API_BASE_URL.replace(/^http/, 'ws')}/ws`)
     socket.onmessage = (event) => {
-      const payload = JSON.parse(event.data) as { type?: string; message?: ChatMessage }
+      const payload = JSON.parse(event.data) as { type?: string; message?: ChatMessage; order?: any }
+      if (payload.type === 'order.updated' && payload.order) {
+        const updatedOrder = normalizeOrder(payload.order)
+        setOrders((current) => current.some((order) => order.id === updatedOrder.id)
+          ? current.map((order) => order.id === updatedOrder.id ? updatedOrder : order)
+          : [updatedOrder, ...current])
+        const notification = { id: Date.now(), text: `Đơn hàng ${updatedOrder.id} chuyển sang ${updatedOrder.status}.` }
+        setNotifications((current) => [notification, ...current].slice(0, 3))
+        window.setTimeout(() => setNotifications((current) => current.filter((item) => item.id !== notification.id)), 5000)
+        return
+      }
       const message = payload.message
       if (payload.type !== 'chat.message' || !message) return
-      if (!chatConversations.some((item) => item.userId === message.userId)) {
-        fetchJson<{ success: boolean; data?: ChatConversation[] }>('/api/chat/conversations')
-          .then((response) => setChatConversations(response.data || []))
-          .catch(() => undefined)
-      }
+      fetchJson<{ success: boolean; data?: ChatConversation[] }>('/api/chat/conversations')
+        .then((response) => setChatConversations(response.data || []))
+        .catch(() => undefined)
       setChatConversations((current) => {
         const existing = current.find((item) => item.userId === message.userId)
         if (!existing) return current
@@ -509,10 +494,18 @@ function App() {
       totals[order.date.slice(0, 10)] = (totals[order.date.slice(0, 10)] || 0) + order.amount
       return totals
     }, {})
-    const values = Object.values(dailyTotals).slice(-7)
-    const max = Math.max(...values, 1)
-    return values.length ? values.map((value) => Math.max(8, Math.round((value / max) * 100))) : [8]
+    const values = Object.entries(dailyTotals).slice(-7)
+    const max = Math.max(...values.map(([, value]) => value), 1)
+    return values.length
+      ? values.map(([date, value]) => ({ date, height: Math.max(8, Math.round((value / max) * 100)) }))
+      : [{ date: new Date().toISOString().slice(0, 10), height: 8 }]
   }, [orders])
+
+  const dashboardActivities = useMemo(() => [
+    { color: 'green', text: `${orders.length} đơn hàng trong hệ thống` },
+    { color: 'blue', text: `${products.filter((product) => product.stock <= 0).length} sản phẩm hết hàng cần bổ sung` },
+    { color: 'orange', text: `${reviews.length} đánh giá từ khách hàng` },
+  ], [orders.length, products, reviews.length])
 
   const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -525,8 +518,9 @@ function App() {
     try {
       const response = await requestJson<{
         success: boolean
+        token?: string
         data?: { id: number; name: string; email: string; phone: string; roleId: number; role: string }
-      }>('/api/auth/login', {
+      }>('/api/auth/admin-login', {
         method: 'POST',
         body: JSON.stringify({ identifier: email.trim(), password }),
       })
@@ -537,6 +531,7 @@ function App() {
       }
 
       localStorage.setItem('admin-user', JSON.stringify(user))
+      if (response.token) localStorage.setItem('admin-token', response.token)
       setIsLoggedIn(true)
       setLoginError('')
     } catch (err) {
@@ -546,6 +541,7 @@ function App() {
 
   const handleLogout = () => {
     localStorage.removeItem('admin-user')
+    localStorage.removeItem('admin-token')
     setIsLoggedIn(false)
     setLoginError('')
   }
@@ -1570,6 +1566,11 @@ function App() {
           </div>
         )}
 
+        {notifications.length > 0 && (
+          <div className="admin-notifications" aria-live="polite">
+            {notifications.map((notification) => <div key={notification.id}>{notification.text}</div>)}
+          </div>
+        )}
         {error && <div className="api-alert">{error}</div>}
 
         {loading ? (
@@ -1597,10 +1598,10 @@ function App() {
                       <span>Tháng này</span>
                     </div>
                     <div className="chart-bars" aria-label="Biểu đồ doanh thu">
-                      {dashboardChartBars.map((height, index) => (
-                        <div key={index} className="bar-wrap">
-                          <span className="bar" style={{ height: `${height}%` }} />
-                          <small>{`Ngày ${index + 1}`}</small>
+                      {dashboardChartBars.map((bar) => (
+                        <div key={bar.date} className="bar-wrap">
+                          <span className="bar" style={{ height: `${bar.height}%` }} />
+                          <small>{new Date(bar.date).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}</small>
                         </div>
                       ))}
                     </div>
@@ -1612,18 +1613,12 @@ function App() {
                       <span>Hôm nay</span>
                     </div>
                     <ul className="activity-list">
-                      <li>
-                        <span className="dot green" />
-                        3 đơn hàng mới được đặt
-                      </li>
-                      <li>
-                        <span className="dot blue" />
-                        12 sản phẩm hết hàng cần bổ sung
-                      </li>
-                      <li>
-                        <span className="dot orange" />
-                        5 đánh giá mới từ khách hàng
-                      </li>
+                      {dashboardActivities.map((activity) => (
+                        <li key={activity.color}>
+                          <span className={`dot ${activity.color}`} />
+                          {activity.text}
+                        </li>
+                      ))}
                     </ul>
                   </div>
                 </section>

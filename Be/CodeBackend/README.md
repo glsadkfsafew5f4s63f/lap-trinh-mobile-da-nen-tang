@@ -116,7 +116,8 @@ npm start
 ## Module nghiệp vụ quần áo
 
 - POST /api/auth/register - Đăng ký
-- POST /api/auth/login - Đăng nhập JWT
+- POST /api/auth/login - Đăng nhập người dùng, trả về JWT
+- POST /api/auth/admin-login - Đăng nhập dành riêng cho tài khoản Admin
 - GET /api/auth/me - Thông tin tài khoản
 - GET /api/products - Danh sách sản phẩm + tìm kiếm + phân trang
 - GET /api/products/:id - Chi tiết + biến thể + hình ảnh
@@ -136,3 +137,13 @@ npm start
 - Backend được sinh dựa trên cấu trúc thực tế của MySQL.
 - Foreign Key được phân tích trong `utils/relationships.js`.
 - Nghiệp vụ đặt hàng dùng transaction để tạo đơn, trừ tồn kho và làm sạch giỏ hàng.
+
+## Chạy kiểm tra
+
+```bash
+npm test
+npm start
+```
+
+Các request quản trị phải gửi header `Authorization: Bearer <JWT>`. Trước khi triển khai,
+cần thay `JWT_SECRET` trong `.env` bằng chuỗi ngẫu nhiên dài và không đưa file `.env` lên Git.

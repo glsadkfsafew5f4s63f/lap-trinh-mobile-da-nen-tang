@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export type ApiProductImage = {
   url: string;
@@ -72,9 +73,15 @@ export const API_BASE_URL =
 
   export const CHAT_SOCKET_URL = API_BASE_URL.replace(/^http/, 'ws') + '/ws';
 
+  export const AUTH_TOKEN_STORAGE_KEY = '@anhuyqa:token';
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
+    const token = await AsyncStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
   const response = await fetch(`${API_BASE_URL}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
     ...options,
   });
 
@@ -139,14 +146,14 @@ export function checkApiHealth() {
 }
 
 export function registerApiUser(name: string, phone: string, password: string) {
-  return request<{ success: boolean; data: ApiUser }>('/api/auth/register', {
+  return request<{ success: boolean; data: ApiUser; token: string }>('/api/auth/register', {
     method: 'POST',
     body: JSON.stringify({ name, phone, password }),
   });
 }
 
 export function loginApiUser(phone: string, password: string) {
-  return request<{ success: boolean; data: ApiUser }>('/api/auth/login', {
+  return request<{ success: boolean; data: ApiUser; token: string }>('/api/auth/login', {
     method: 'POST',
     body: JSON.stringify({ phone, password }),
   });

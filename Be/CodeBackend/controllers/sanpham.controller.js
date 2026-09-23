@@ -22,6 +22,14 @@ exports.getById = async (req, res) => {
 
 exports.create = async (req, res) => {
     const { images = [], colors = [], sizes = [], stock = 0, ...productData } = req.body;
+    const name = String(productData.TenSanPham || '').trim();
+    const price = Number(productData.Gia);
+    const availableStock = Number(stock);
+    if (!name || !Number.isFinite(price) || price < 0 || !Number.isFinite(availableStock) || availableStock < 0) {
+        return res.status(400).json({ success: false, message: 'Tên sản phẩm, giá và tồn kho không hợp lệ.' });
+    }
+    productData.TenSanPham = name;
+    productData.Gia = price;
     const connection = await db.getConnection();
     try {
         await connection.beginTransaction();
