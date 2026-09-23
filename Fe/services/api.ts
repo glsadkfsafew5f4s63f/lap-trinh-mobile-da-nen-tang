@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export type ApiProductImage = {
   url: string;
@@ -41,6 +42,17 @@ export type ApiReview = {
   comment: string;
   author: string;
   date: string;
+  status?: string;
+  reply?: string | null;
+};
+
+export type ChatMessage = {
+  id: number;
+  userId: number;
+  sender: 'NguoiDung' | 'Admin';
+  message: string;
+  isRead: number;
+  date: string;
 };
 
 export type ApiUser = {
@@ -59,9 +71,17 @@ export const API_BASE_URL =
       : 'http://localhost:7000'
     : 'https://your-api-domain.example.com');
 
+  export const CHAT_SOCKET_URL = API_BASE_URL.replace(/^http/, 'ws') + '/ws';
+
+  export const AUTH_TOKEN_STORAGE_KEY = '@anhuyqa:token';
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
+    const token = await AsyncStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
   const response = await fetch(`${API_BASE_URL}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
     ...options,
   });
 
@@ -126,14 +146,14 @@ export function checkApiHealth() {
 }
 
 export function registerApiUser(name: string, phone: string, password: string) {
-  return request<{ success: boolean; data: ApiUser }>('/api/auth/register', {
+  return request<{ success: boolean; data: ApiUser; token: string }>('/api/auth/register', {
     method: 'POST',
     body: JSON.stringify({ name, phone, password }),
   });
 }
 
 export function loginApiUser(phone: string, password: string) {
-  return request<{ success: boolean; data: ApiUser }>('/api/auth/login', {
+  return request<{ success: boolean; data: ApiUser; token: string }>('/api/auth/login', {
     method: 'POST',
     body: JSON.stringify({ phone, password }),
   });
@@ -248,7 +268,7 @@ export function createOrderApi(input: {
   PhuongThucThanhToan?: string;
   TienCoc: number;
   TienConLai: number;
-  TrangThaiThanhToan: 'DaCoc' | 'DaThanhToan';
+  TrangThaiThanhToan: 'ChuaCoc' | 'DaCoc' | 'DaThanhToan';
   items: Array<{
     variantId: number;
     productId: string;
@@ -259,7 +279,7 @@ export function createOrderApi(input: {
     name: string;
   }>;
 }) {
-  return request<{ success: boolean; data?: OrderApiRecord }>('/api/orders/checkout', {
+  return request<{ success: boolean; data?: OrderApiRecord & { insertId?: number } }>('/api/orders/checkout', {
     method: 'POST',
     body: JSON.stringify({
       MaNguoiDung: input.MaNguoiDung,
@@ -282,5 +302,16 @@ export function createOrderApi(input: {
         DonGia: item.price,
       })),
     }),
+  });
+}
+
+export function getChatMessages(userId: number) {
+  return request<{ success: boolean; data: ChatMessage[] }>(`/api/chat/${userId}`).then((body) => body.data ?? []);
+}
+
+export function sendChatMessage(userId: number, sender: ChatMessage['sender'], message: string) {
+  return request<{ success: boolean }>('/api/chat', {
+    method: 'POST',
+    body: JSON.stringify({ userId, sender, message }),
   });
 }

@@ -3,7 +3,15 @@ const Danhgia = {};
 const db = require('../common/db');
 
 Danhgia.getAll = async () => {
-    const [rows] = await db.query('SELECT * FROM `danhgia`');
+    const [rows] = await db.query(`
+        SELECT dg.MaDanhGia AS id, dg.MaSanPham AS productId, dg.MaNguoiDung AS userId,
+               dg.MaDonHang AS orderId, dg.SoSao AS stars, dg.NoiDung AS comment,
+               dg.NgayDanhGia AS date, dg.TrangThai AS status, dg.PhanHoi AS reply,
+               dg.NgayPhanHoi AS replyDate, nd.HoTen AS author, sp.TenSanPham AS product
+        FROM DanhGia dg
+        INNER JOIN NguoiDung nd ON nd.MaNguoiDung = dg.MaNguoiDung
+        INNER JOIN SanPham sp ON sp.MaSanPham = dg.MaSanPham
+        ORDER BY dg.NgayDanhGia DESC`);
     return rows;
 };
 
@@ -17,10 +25,11 @@ Danhgia.getByProductId = async (productId) => {
             dg.SoSao AS stars,
             dg.NoiDung AS comment,
             dg.NgayDanhGia AS date,
+            dg.TrangThai AS status, dg.PhanHoi AS reply,
             nd.HoTen AS author
         FROM DanhGia dg
         INNER JOIN NguoiDung nd ON nd.MaNguoiDung = dg.MaNguoiDung
-        WHERE dg.MaSanPham = ?
+        WHERE dg.MaSanPham = ? AND dg.TrangThai <> 'An'
         ORDER BY dg.NgayDanhGia DESC
     `, [productId]);
     return rows;

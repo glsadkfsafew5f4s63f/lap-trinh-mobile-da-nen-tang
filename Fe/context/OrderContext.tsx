@@ -4,7 +4,7 @@ import { createContext, ReactNode, useContext, useEffect, useMemo, useState } fr
 import { getOrderTotal, mockOrders, Order, OrderItem } from '../data/orders';
 import { mockUser } from '../data/user';
 import { getProductById } from '../data/products';
-import { createOrderApi, getApiOrders } from '../services/api';
+import { CHAT_SOCKET_URL, createOrderApi, getApiOrders, OrderApiRecord } from '../services/api';
 import { useAuth } from './AuthContext';
 
 type NewOrderInput = {
@@ -19,7 +19,7 @@ type NewOrderInput = {
 type OrderContextValue = {
   orders: Order[];
   getOrderById: (id: string) => Order | undefined;
-  addOrder: (input: NewOrderInput) => Order;
+  addOrder: (input: NewOrderInput) => Promise<Order>;
   markReviewed: (orderId: string, productId: string) => void;
   isLoading: boolean;
   error: string | null;
@@ -27,6 +27,40 @@ type OrderContextValue = {
 
 const ORDER_STORAGE_KEY = '@anhuyqa:orders';
 const OrderContext = createContext<OrderContextValue | null>(null);
+
+function mapApiOrder(row: OrderApiRecord, index: number): Order {
+  return {
+    id: row.MaDonHang ? `DH${String(row.MaDonHang).padStart(3, '0')}` : `DH${String(index + 1).padStart(3, '0')}`,
+    date: row.NgayDat ? new Date(row.NgayDat).toLocaleDateString('vi-VN') : new Date().toLocaleDateString('vi-VN'),
+    status: row.TrangThai === 'DaXacNhan'
+      ? 'Đã xác nhận'
+      : row.TrangThai === 'DangGiao'
+        ? 'Đang giao'
+        : row.TrangThai === 'DaGiao'
+          ? 'Đã giao'
+          : row.TrangThai === 'DaHuy'
+            ? 'Đã hủy'
+            : 'Chờ xác nhận',
+    payment: 'COD',
+    deposit: Number(row.TienCoc || 0),
+    remaining: Number(row.TienConLai || 0),
+    paymentStatus: row.TrangThaiThanhToan || 'ChuaCoc',
+    name: row.HoTenNguoiNhan,
+    phone: row.SoDienThoaiNguoiNhan,
+    address: row.DiaChiGiaoHang,
+    shippingFee: Number(row.PhiVanChuyen || 30000),
+    items: (row.items ?? []).map((item) => ({
+      productId: String(item.MaSanPham),
+      variantId: item.MaBienThe,
+      sku: item.SKU,
+      color: item.Mau,
+      size: item.KichThuoc,
+      quantity: Number(item.SoLuong),
+      price: Number(item.DonGia),
+    })),
+    reviewedProductIds: [],
+  };
+}
 
 export function OrderProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
@@ -77,37 +111,7 @@ export function OrderProvider({ children }: { children: ReactNode }) {
           return;
         }
         if (rows.length > 0) {
-          const mapped: Order[] = rows.map((row, index) => ({
-            id: row.MaDonHang ? `DH${String(row.MaDonHang).padStart(3, '0')}` : `DH${String(index + 1).padStart(3, '0')}`,
-            date: row.NgayDat ? new Date(row.NgayDat).toLocaleDateString('vi-VN') : new Date().toLocaleDateString('vi-VN'),
-            status: row.TrangThai === 'DaXacNhan'
-              ? 'Đã xác nhận'
-              : row.TrangThai === 'DangGiao'
-                ? 'Đang giao'
-                : row.TrangThai === 'DaGiao'
-                  ? 'Đã giao'
-                  : row.TrangThai === 'DaHuy'
-                    ? 'Đã hủy'
-                    : 'Chờ xác nhận',
-            payment: 'COD',
-            deposit: Number(row.TienCoc || 0),
-            remaining: Number(row.TienConLai || 0),
-            paymentStatus: row.TrangThaiThanhToan || 'ChuaCoc',
-            name: row.HoTenNguoiNhan,
-            phone: row.SoDienThoaiNguoiNhan,
-            address: row.DiaChiGiaoHang,
-            shippingFee: Number(row.PhiVanChuyen || 30000),
-            items: (row.items ?? []).map((item) => ({
-              productId: String(item.MaSanPham),
-              variantId: item.MaBienThe,
-              sku: item.SKU,
-              color: item.Mau,
-              size: item.KichThuoc,
-              quantity: Number(item.SoLuong),
-              price: Number(item.DonGia),
-            })),
-            reviewedProductIds: [],
-          }));
+          const mapped = rows.map(mapApiOrder);
           setOrdersByUser((current) => ({ ...current, [userKey]: mapped.length > 0 ? mapped : current[userKey] ?? mockOrders }));
         }
       })
@@ -115,8 +119,18 @@ export function OrderProvider({ children }: { children: ReactNode }) {
         setError('Không kết nối được server đơn hàng, đang dùng dữ liệu local.');
       });
 
+    const socket = new WebSocket(CHAT_SOCKET_URL);
+    socket.onmessage = (event) => {
+      const payload = JSON.parse(event.data) as { type?: string; order?: { MaNguoiDung?: number } };
+      if (payload.type !== 'order.delivered' || Number(payload.order?.MaNguoiDung) !== user.id) return;
+      getApiOrders(user.id).then((rows) => {
+        if (active) setOrdersByUser((current) => ({ ...current, [userKey]: rows.map(mapApiOrder) }));
+      }).catch(() => undefined);
+    };
+
     return () => {
       active = false;
+      socket.close();
     };
   }, [user, userKey]);
 
@@ -130,12 +144,15 @@ export function OrderProvider({ children }: { children: ReactNode }) {
       getOrderById(id: string) {
         return orders.find((item) => item.id === id);
       },
-      addOrder(input: NewOrderInput) {
+      async addOrder(input: NewOrderInput) {
         const order: Order = {
           id: `DH${String(orders.length + 4).padStart(3, '0')}`,
           date: new Date().toLocaleDateString('vi-VN'),
           status: 'Chờ xác nhận',
-          payment: 'COD',
+          payment: 'Cọc 20% + COD',
+          deposit: input.deposit,
+          remaining: input.remaining,
+          paymentStatus: 'ChuaCoc',
           name: input.name,
           phone: input.phone,
           address: input.address,
@@ -145,7 +162,7 @@ export function OrderProvider({ children }: { children: ReactNode }) {
         };
 
         if (user && user.id) {
-          createOrderApi({
+          const response = await createOrderApi({
             MaNguoiDung: user.id,
             HoTenNguoiNhan: input.name,
             SoDienThoaiNguoiNhan: input.phone,
@@ -155,14 +172,14 @@ export function OrderProvider({ children }: { children: ReactNode }) {
             PhuongThucThanhToan: 'Coc 20% + COD',
             TienCoc: input.deposit,
             TienConLai: input.remaining,
-            TrangThaiThanhToan: 'DaCoc',
+            TrangThaiThanhToan: 'ChuaCoc',
             items: input.items.map((item) => {
               const product = getProductById(item.productId);
               const variant = product?.variants?.find(
                 (candidate) => candidate.color === item.color && candidate.size === item.size
               );
               return {
-                variantId: item.variantId ?? variant?.id ?? 0,
+                variantId: item.variantId && item.variantId > 0 ? item.variantId : variant?.id ?? 0,
                 productId: item.productId,
                 quantity: item.quantity,
                 price: item.price,
@@ -173,7 +190,11 @@ export function OrderProvider({ children }: { children: ReactNode }) {
             }),
           }).catch(() => {
             setError('Tạo đơn hàng chưa đồng bộ với server, dữ liệu local đã được lưu.');
+            return null;
           });
+          if (response?.data?.insertId) {
+            order.id = `DH${String(response.data.insertId).padStart(3, '0')}`;
+          }
         }
 
         if (userKey) {

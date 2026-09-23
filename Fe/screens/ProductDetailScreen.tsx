@@ -19,6 +19,7 @@ import { QuantityStepper } from '../components/QuantityStepper';
 import { colors, radius } from '../constants/theme';
 import { useCart } from '../context/CartContext';
 import { useFavorites } from '../context/FavoriteContext';
+import { useOrders } from '../context/OrderContext';
 import { useReviews } from '../context/ReviewContext';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -38,6 +39,7 @@ export default function ProductDetailScreen({ navigation, route }: Props) {
   const [product, setProduct] = useState(() => getProductById(route.params.productId));
   const { addToCart } = useCart();
   const { isFavorite, toggle } = useFavorites();
+  const { orders } = useOrders();
   const { getReviews, loadReviews } = useReviews();
   const { user } = useAuth();
 
@@ -83,6 +85,9 @@ export default function ProductDetailScreen({ navigation, route }: Props) {
   const reviewAverage = reviews.length > 0
     ? reviews.reduce((sum, review) => sum + review.stars, 0) / reviews.length
     : 0;
+  const reviewOrder = orders.find((order) =>
+    order.status === 'Đã giao' && order.items.some((item) => item.productId === product.id)
+  );
 
   function onGalleryScroll(event: NativeSyntheticEvent<NativeScrollEvent>) {
     setGalleryIndex(Math.round(event.nativeEvent.contentOffset.x / width));
@@ -187,6 +192,13 @@ export default function ProductDetailScreen({ navigation, route }: Props) {
           {selectedVariant?.sku ? <Text style={styles.sku}>Mã sản phẩm: {selectedVariant.sku}</Text> : null}
           <Text style={styles.description}>{product.description}</Text>
 
+          <View style={styles.highlightPanel}>
+            <Text style={styles.highlightTitle}>Điểm nổi bật</Text>
+            <View style={styles.highlightRow}><Ionicons name="sparkles-outline" size={17} color={colors.accent} /><Text style={styles.highlightText}>Thiết kế dễ phối, phù hợp nhiều hoàn cảnh sử dụng.</Text></View>
+            <View style={styles.highlightRow}><Ionicons name="leaf-outline" size={17} color={colors.accent} /><Text style={styles.highlightText}>Chất liệu được chọn để mặc thoải mái cả ngày.</Text></View>
+            <View style={styles.highlightRow}><Ionicons name="shield-checkmark-outline" size={17} color={colors.accent} /><Text style={styles.highlightText}>Kiểm tra sản phẩm trước khi nhận hàng.</Text></View>
+          </View>
+
           <Text style={styles.label}>Màu sắc · {selectedColor?.name}</Text>
           <View style={styles.row}>
             {product.colors.map((item, index) => (
@@ -258,6 +270,26 @@ export default function ProductDetailScreen({ navigation, route }: Props) {
             </View>
             <Ionicons name="chatbubble-ellipses-outline" size={22} color={colors.accent} />
           </View>
+          <Pressable
+            style={styles.writeReviewButton}
+            onPress={() => {
+              if (!user) {
+                Alert.alert('Cần đăng nhập', 'Đăng nhập để viết đánh giá sản phẩm.', [
+                  { text: 'Để sau' },
+                  { text: 'Đăng nhập', onPress: () => navigation.navigate('Login') },
+                ]);
+                return;
+              }
+              if (!reviewOrder) {
+                Alert.alert('Chưa đủ điều kiện', 'Bạn chỉ có thể đánh giá sau khi đơn hàng chứa sản phẩm này đã giao thành công.');
+                return;
+              }
+              navigation.navigate('ProductReview', { orderId: reviewOrder.id, productId: product.id });
+            }}
+          >
+            <Ionicons name="create-outline" size={18} color={colors.accent} />
+            <Text style={styles.writeReviewText}>{reviewOrder ? 'Viết đánh giá và bình luận' : 'Đánh giá sau khi nhận hàng'}</Text>
+          </Pressable>
           {reviews.length > 0 ? (
             reviews.slice(0, 2).map((review) => (
               <View key={review.id} style={styles.reviewCard}>
@@ -276,6 +308,7 @@ export default function ProductDetailScreen({ navigation, route }: Props) {
                   ))}
                 </View>
                 <Text style={styles.reviewComment}>{review.comment}</Text>
+                {review.reply ? <View style={styles.adminReply}><Text style={styles.adminReplyLabel}>Admin phản hồi</Text><Text style={styles.adminReplyText}>{review.reply}</Text></View> : null}
               </View>
             ))
           ) : (
@@ -422,6 +455,29 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     color: '#4A453F',
   },
+  highlightPanel: {
+    marginTop: 18,
+    padding: 15,
+    borderRadius: radius.md,
+    backgroundColor: '#FBF4EC',
+    gap: 10,
+  },
+  highlightTitle: {
+    color: colors.ink,
+    fontWeight: '800',
+    fontSize: 15,
+  },
+  highlightRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 9,
+  },
+  highlightText: {
+    flex: 1,
+    color: '#625A51',
+    fontSize: 13,
+    lineHeight: 19,
+  },
   sku: {
     marginTop: 6,
     fontSize: 12,
@@ -520,6 +576,22 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  writeReviewButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 12,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: colors.accent,
+    borderRadius: radius.md,
+  },
+  writeReviewText: {
+    color: colors.accent,
+    fontWeight: '800',
+    fontSize: 13,
+  },
   reviewTitle: {
     fontSize: 18,
     fontWeight: '700',
@@ -568,6 +640,23 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 19,
     marginTop: 7,
+  },
+  adminReply: {
+    marginTop: 10,
+    padding: 10,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.accent,
+    backgroundColor: '#FBF4EC',
+  },
+  adminReplyLabel: {
+    color: colors.accent,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  adminReplyText: {
+    color: '#625A51',
+    marginTop: 3,
+    lineHeight: 18,
   },
   noReviews: {
     color: colors.muted,

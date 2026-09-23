@@ -58,7 +58,15 @@ exports.createVerified = async (req, res) => {
 
 exports.update = async (req, res) => {
     try {
-        const result = await Danhgia.update(req.params.id, req.body);
+        const payload = {};
+        if (req.body.PhanHoi !== undefined) {
+            payload.PhanHoi = String(req.body.PhanHoi || '').trim() || null;
+            payload.NgayPhanHoi = payload.PhanHoi ? new Date() : null;
+        }
+        if (req.body.TrangThai !== undefined) {
+            payload.TrangThai = req.body.TrangThai === 'An' ? 'An' : 'DaDuyet';
+        }
+        const result = await Danhgia.update(req.params.id, payload);
         if (!result.affectedRows) return res.status(404).json({ success: false, message: 'Không tìm thấy dữ liệu' });
         res.json({ success: true, message: 'Cập nhật thành công', data: result });
     } catch (error) {

@@ -30,36 +30,12 @@ Donhang.create = async (data) => {
 };
 
 Donhang.createCheckout = async (data) => {
-    const total = Number(data.TongTien);
-    const deposit = Math.round(total * 0.2);
-    const remaining = total - deposit;
-    if (Number(data.TienCoc) !== deposit || Number(data.TienConLai) !== remaining) {
-        throw new Error('Tiền cọc phải bằng đúng 20% tổng đơn hàng');
-    }
-
     const connection = await db.getConnection();
     try {
         await connection.beginTransaction();
 
-        const [orderResult] = await connection.query(`
-            INSERT INTO DonHang
-                (MaNguoiDung, HoTenNguoiNhan, SoDienThoaiNguoiNhan, DiaChiGiaoHang,
-                  TongTien, PhiVanChuyen, TienCoc, TienConLai,
-                  PhuongThucThanhToan, TrangThaiThanhToan)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `, [
-            data.MaNguoiDung,
-            data.HoTenNguoiNhan,
-            data.SoDienThoaiNguoiNhan,
-            data.DiaChiGiaoHang,
-            data.TongTien,
-            data.PhiVanChuyen,
-            data.TienCoc,
-            data.TienConLai,
-            data.PhuongThucThanhToan || 'Coc 20%',
-            data.TrangThaiThanhToan || 'DaCoc'
-        ]);
-
+        const items = [];
+        let subtotal = 0;
         for (const item of data.items || []) {
             const [variants] = await connection.query(`
                 SELECT bt.MaBienThe, bt.MaSanPham, bt.SoLuongTon,
@@ -81,6 +57,40 @@ Donhang.createCheckout = async (data) => {
                 throw new Error(`Biến thể ${variant.MaBienThe} không đủ tồn kho`);
             }
 
+            const quantity = Number(item.SoLuong);
+            const price = Number(variant.Gia);
+            subtotal += price * quantity;
+            items.push({ item, variant, quantity, price });
+        }
+
+        const shippingFee = Number(data.PhiVanChuyen || 0);
+        const total = subtotal + shippingFee;
+        const deposit = Math.round(total * 0.2);
+        const remaining = total - deposit;
+        if (Number(data.TienCoc) !== deposit || Number(data.TienConLai) !== remaining) {
+            throw new Error('Tiền cọc phải bằng đúng 20% tổng đơn hàng');
+        }
+
+        const [orderResult] = await connection.query(`
+            INSERT INTO DonHang
+                (MaNguoiDung, HoTenNguoiNhan, SoDienThoaiNguoiNhan, DiaChiGiaoHang,
+                  TongTien, PhiVanChuyen, TienCoc, TienConLai,
+                  PhuongThucThanhToan, TrangThaiThanhToan)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [
+            data.MaNguoiDung,
+            data.HoTenNguoiNhan,
+            data.SoDienThoaiNguoiNhan,
+            data.DiaChiGiaoHang,
+            total,
+            shippingFee,
+            deposit,
+            remaining,
+            data.PhuongThucThanhToan || 'Coc 20%',
+            data.TrangThaiThanhToan || 'ChuaCoc'
+        ]);
+
+        for (const { variant, quantity, price } of items) {
             await connection.query(`
                 INSERT INTO ChiTietDonHang
                     (MaDonHang, MaBienThe, TenSanPham, Mau, KichThuoc, SoLuong, DonGia)
@@ -91,13 +101,13 @@ Donhang.createCheckout = async (data) => {
                 variant.TenSanPham,
                 variant.Mau,
                 variant.KichThuoc,
-                Number(item.SoLuong),
-                Number(variant.Gia)
+                quantity,
+                price
             ]);
 
             await connection.query(
                 'UPDATE BienTheSanPham SET SoLuongTon = SoLuongTon - ? WHERE MaBienThe = ?',
-                [Number(item.SoLuong), variant.MaBienThe]
+                [quantity, variant.MaBienThe]
             );
         }
 
