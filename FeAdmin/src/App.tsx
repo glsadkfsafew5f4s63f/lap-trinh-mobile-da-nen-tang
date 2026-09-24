@@ -93,7 +93,7 @@ const normalizeOrder = (item: any): Order => {
   if (rawStatus === 'Đã thanh toán' || rawStatus === 'paid' || rawStatus === 'success') status = 'Đã thanh toán'
   else if (rawStatus === 'Đang giao' || rawStatus === 'shipping') status = 'Đang giao'
 
-  const date = item?.NgayDat || item?.ngayDat || item?.date || '2026-09-16'
+  const date = item?.NgayDat || item?.ngayDat || item?.date || ''
 
   return { id: `#${String(id).replace('#', '')}`, customer, amount, status, date }
 }
@@ -388,8 +388,17 @@ function App() {
     }, {})
     const values = Object.values(dailyTotals).slice(-7)
     const max = Math.max(...values, 1)
-    return values.length ? values.map((value) => Math.max(8, Math.round((value / max) * 100))) : [8]
+    return values.length ? values.map((value) => Math.max(8, Math.round((value / max) * 100))) : []
   }, [orders])
+
+  const dashboardActivities = useMemo(() => {
+    const latestOrders = orders.slice(0, 3).map((order) => `Đơn ${order.id} đang ở trạng thái ${order.status.toLocaleLowerCase('vi-VN')}`)
+    const lowStock = products.filter((product) => product.stock <= 10).length
+    const activities = [...latestOrders]
+    if (lowStock > 0) activities.push(`${lowStock} sản phẩm sắp hết hàng cần bổ sung`)
+    if (reviews.length > 0) activities.push(`${reviews.length} đánh giá đang chờ quản lý`)
+    return activities.slice(0, 3)
+  }, [orders, products, reviews.length])
 
   const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -1370,9 +1379,10 @@ function App() {
                       {dashboardChartBars.map((height, index) => (
                         <div key={index} className="bar-wrap">
                           <span className="bar" style={{ height: `${height}%` }} />
-                          <small>{`Ngày ${index + 1}`}</small>
+                          <small>{orders.slice(-dashboardChartBars.length)[index]?.date.slice(0, 10) || '-'}</small>
                         </div>
                       ))}
+                      {!dashboardChartBars.length && <p>Chưa có dữ liệu đơn hàng trong kỳ.</p>}
                     </div>
                   </div>
 
@@ -1382,18 +1392,8 @@ function App() {
                       <span>Hôm nay</span>
                     </div>
                     <ul className="activity-list">
-                      <li>
-                        <span className="dot green" />
-                        3 đơn hàng mới được đặt
-                      </li>
-                      <li>
-                        <span className="dot blue" />
-                        12 sản phẩm hết hàng cần bổ sung
-                      </li>
-                      <li>
-                        <span className="dot orange" />
-                        5 đánh giá mới từ khách hàng
-                      </li>
+                      {dashboardActivities.map((activity, index) => <li key={`${activity}-${index}`}><span className={`dot ${index === 0 ? 'green' : index === 1 ? 'blue' : 'orange'}`} />{activity}</li>)}
+                      {!dashboardActivities.length && <li>Chưa có hoạt động mới.</li>}
                     </ul>
                   </div>
                 </section>
