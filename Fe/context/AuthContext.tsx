@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from 'react';
 
 import { User } from '../data/user';
-import { loginApiUser, registerApiUser } from '../services/api';
+import { loginApiUser, logoutApiUser, registerApiUser } from '../services/api';
 
 type AuthContextValue = {
   user: User | null;
@@ -102,6 +102,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       logout() {
         setUser(null);
+        void logoutApiUser();
         persistUser(null);
       },
       updateUser(data: Partial<User>) {

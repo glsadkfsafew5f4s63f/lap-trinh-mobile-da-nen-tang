@@ -27,12 +27,13 @@ export default function ProductReviewScreen({ navigation, route }: Props) {
       Alert.alert('Lỗi', 'Không tìm thấy đơn hoặc sản phẩm.');
       return;
     }
+    const detailId = order.items.find((item) => item.productId === product.id)?.detailId;
     const error = await addReview({
       productId: product.id,
       author: 'Bạn',
       stars,
       comment: comment.trim() || 'Sản phẩm đúng mô tả và giao hàng nhanh.',
-    }, order.id);
+    }, order.id, detailId);
     if (error) {
       Alert.alert('Không thể gửi đánh giá', error);
       return;

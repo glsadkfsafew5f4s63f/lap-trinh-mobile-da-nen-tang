@@ -3,10 +3,11 @@ import { createContext, ReactNode, useContext, useEffect, useMemo, useState } fr
 
 import { getProductById, getProductVariantStock, Product } from '../data/products';
 import { mockUser } from '../data/user';
-import { addCartItemApi, removeCartItemApi } from '../services/api';
+import { addCartItemApi, getApiCart, removeCartItemApi, updateCartItemApi } from '../services/api';
 import { useAuth } from './AuthContext';
 
 export type CartLine = {
+  serverItemId?: number;
   productId: string;
   colorIndex: number;
   sizeIndex: number;
@@ -43,6 +44,16 @@ const initialLines: CartLine[] = [
   { productId: '1', colorIndex: 0, sizeIndex: 1, quantity: 1 },
   { productId: '2', colorIndex: 0, sizeIndex: 2, quantity: 1 },
 ];
+
+function mapServerCart(items: Awaited<ReturnType<typeof getApiCart>>['items']): CartLine[] {
+  return items.flatMap((item) => {
+    const product = getProductById(String(item.MaSanPham));
+    if (!product) return [];
+    const colorIndex = Math.max(0, product.colors.findIndex((color) => color.name === item.TenMau));
+    const sizeIndex = Math.max(0, product.sizes.findIndex((size) => size === item.TenKichThuoc));
+    return [{ serverItemId: item.MaChiTietGioHang, productId: String(item.MaSanPham), colorIndex, sizeIndex, quantity: Number(item.SoLuong), variantId: item.MaBienThe, sku: item.SKU }];
+  });
+}
 
 export function CartProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
@@ -85,6 +96,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
           setIsLoading(false);
         }
       });
+
+    getApiCart()
+      .then((cart) => {
+        if (active) setLinesByUser((current) => ({ ...current, [userKey]: mapServerCart(cart.items) }));
+      })
+      .catch(() => undefined);
 
     return () => {
       active = false;
@@ -146,20 +163,24 @@ export function CartProvider({ children }: { children: ReactNode }) {
               ? { ...item, quantity: Math.min(stock, item.quantity + quantity), variantId, sku }
               : item
           );
-          addCartItemApi(userId, productId, quantity).catch(() => {
+          const selectedVariantId = variantId ?? product?.variants?.find((candidate) => candidate.color === product.colors[colorIndex]?.name && candidate.size === product.sizes[sizeIndex])?.id
+          if (selectedVariantId) addCartItemApi(userId, selectedVariantId, quantity).catch(() => {
             setError('Không thể đồng bộ giỏ hàng với server, dữ liệu local đã được lưu.');
-          });
+          }).then(() => getApiCart().then((cart) => setLinesByUser((all) => ({ ...all, [userKey]: mapServerCart(cart.items) }))));
           return next;
         }
         const next = [{ productId, colorIndex, sizeIndex, quantity: Math.min(stock, quantity), variantId, sku }, ...current];
-        addCartItemApi(userId, productId, quantity).catch(() => {
+        const selectedVariantId = variantId ?? product?.variants?.find((candidate) => candidate.color === product?.colors[colorIndex]?.name && candidate.size === product?.sizes[sizeIndex])?.id;
+        if (selectedVariantId) addCartItemApi(userId, selectedVariantId, quantity).catch(() => {
           setError('Không thể đồng bộ giỏ hàng với server, dữ liệu local đã được lưu.');
-        });
+        }).then(() => getApiCart().then((cart) => setLinesByUser((all) => ({ ...all, [userKey]: mapServerCart(cart.items) }))));
         return next;
       });
     }
 
     function increase(productId: string, colorIndex: number, sizeIndex: number) {
+      const line = lines.find((item) => item.productId === productId && item.colorIndex === colorIndex && item.sizeIndex === sizeIndex);
+      if (line?.serverItemId) void updateCartItemApi(line.serverItemId, line.quantity + 1);
       updateLines((current) =>
         current.map((item) =>
           item.productId === productId &&
@@ -180,6 +201,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
     }
 
     function decrease(productId: string, colorIndex: number, sizeIndex: number) {
+      const line = lines.find((item) => item.productId === productId && item.colorIndex === colorIndex && item.sizeIndex === sizeIndex);
+      if (line?.serverItemId) void (line.quantity <= 1 ? removeCartItemApi(line.serverItemId) : updateCartItemApi(line.serverItemId, line.quantity - 1));
       updateLines((current) =>
         current
           .map((item) =>
@@ -194,6 +217,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
     }
 
     function remove(productId: string, colorIndex: number, sizeIndex: number) {
+      const line = lines.find((item) => item.productId === productId && item.colorIndex === colorIndex && item.sizeIndex === sizeIndex);
+      if (line?.serverItemId) void removeCartItemApi(line.serverItemId);
       updateLines((current) =>
         current.filter(
           (item) =>
@@ -204,11 +229,6 @@ export function CartProvider({ children }: { children: ReactNode }) {
             )
         )
       );
-      if (user && user.id) {
-        removeCartItemApi(Number(productId)).catch(() => {
-          setError('Không thể xóa mục giỏ trên server.');
-        });
-      }
     }
 
     function clear() {

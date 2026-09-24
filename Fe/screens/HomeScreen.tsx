@@ -35,11 +35,13 @@ export default function HomeScreen({ navigation }: Props) {
   useEffect(() => {
     let active = true;
 
-    loadProductsFromApi().then((data) => {
-      if (active) {
-        setProductList(data);
-      }
-    });
+    loadProductsFromApi()
+      .then((data) => {
+        if (active) {
+          setProductList(data);
+        }
+      })
+      .catch(() => undefined);
 
     return () => {
       active = false;

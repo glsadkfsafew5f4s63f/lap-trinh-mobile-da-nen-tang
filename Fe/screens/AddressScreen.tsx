@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Alert, StyleSheet, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
@@ -6,6 +6,7 @@ import { AppButton } from '../components/AppButton';
 import { AppInput } from '../components/AppInput';
 import { colors } from '../constants/theme';
 import { useAuth } from '../context/AuthContext';
+import { createAddressApi, getApiAddresses, updateAddressApi } from '../services/api';
 import type { RootStackParamList } from './types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Address'>;
@@ -15,16 +16,33 @@ export default function AddressScreen({ navigation }: Props) {
   const [name, setName] = useState(user?.name ?? '');
   const [phone, setPhone] = useState(user?.phone ?? '');
   const [address, setAddress] = useState(user?.address ?? '');
+  const [addressId, setAddressId] = useState<number | null>(null);
 
-  function save() {
+  useEffect(() => {
+    getApiAddresses().then((addresses) => {
+      const current = addresses[0];
+      if (!current) return;
+      setAddressId(current.MaDiaChi);
+      setName(current.TenNguoiNhan);
+      setPhone(current.SoDienThoai);
+      setAddress(current.DiaChiChiTiet);
+    }).catch(() => undefined);
+  }, []);
+
+  async function save() {
     if (!name.trim() || !phone.trim() || !address.trim()) {
       Alert.alert('Thiếu thông tin', 'Nhập đầy đủ tên, SĐT và địa chỉ.');
       return;
     }
-    updateUser({ name: name.trim(), phone: phone.trim(), address: address.trim() });
-    Alert.alert('Đã lưu', 'Địa chỉ nhận hàng đã cập nhật (local).', [
-      { text: 'OK', onPress: () => navigation.goBack() },
-    ]);
+    const payload = { TenNguoiNhan: name.trim(), SoDienThoai: phone.trim(), DiaChiChiTiet: address.trim(), LaMacDinh: 1 };
+    try {
+      if (addressId) await updateAddressApi(addressId, payload);
+      else { const result = await createAddressApi(payload); setAddressId(result.insertId); }
+      updateUser({ name: payload.TenNguoiNhan, phone: payload.SoDienThoai, address: payload.DiaChiChiTiet });
+      Alert.alert('Đã lưu', 'Địa chỉ nhận hàng đã được cập nhật.', [{ text: 'OK', onPress: () => navigation.goBack() }]);
+    } catch (error) {
+      Alert.alert('Không thể lưu địa chỉ', error instanceof Error ? error.message : 'Vui lòng thử lại.');
+    }
   }
 
   return (

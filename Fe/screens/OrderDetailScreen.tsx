@@ -105,7 +105,7 @@ export default function OrderDetailScreen({ navigation, route }: Props) {
                           author: 'Bạn',
                           stars,
                           comment: comment.trim() || 'Sản phẩm đúng mô tả.',
-                        }, order.id);
+                        }, order.id, item.detailId);
                         setIsSubmitting(false);
                         if (error) {
                           Alert.alert('Không thể gửi đánh giá', error);

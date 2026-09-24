@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Image } from 'expo-image';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { AppButton } from '../components/AppButton';
@@ -12,6 +12,7 @@ import { useCart } from '../context/CartContext';
 import { useOrders } from '../context/OrderContext';
 import { defaultAddress } from '../data/address';
 import { formatPrice } from '../data/products';
+import { getApiAddresses } from '../services/api';
 import type { RootStackParamList } from './types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Checkout'>;
@@ -23,12 +24,24 @@ export default function CheckoutScreen({ navigation }: Props) {
   const [name, setName] = useState(user?.name || defaultAddress.name);
   const [phone, setPhone] = useState(user?.phone || defaultAddress.phone);
   const [address, setAddress] = useState(user?.address || defaultAddress.address);
+  const [addressId, setAddressId] = useState<number | undefined>();
   const [paymentVisible, setPaymentVisible] = useState(false);
   const [pendingOrderId, setPendingOrderId] = useState<string | null>(null);
   const shippingFee = 30000;
   const grandTotal = total + shippingFee;
   const deposit = Math.round(grandTotal * 0.2);
   const remaining = grandTotal - deposit;
+
+  useEffect(() => {
+    getApiAddresses().then((addresses) => {
+      const current = addresses[0];
+      if (!current) return;
+      setAddressId(current.MaDiaChi);
+      setName(current.TenNguoiNhan);
+      setPhone(current.SoDienThoai);
+      setAddress(current.DiaChiChiTiet);
+    }).catch(() => undefined);
+  }, []);
 
   async function placeOrder() {
     if (items.length === 0) {
@@ -43,6 +56,7 @@ export default function CheckoutScreen({ navigation }: Props) {
     try {
       const order = await addOrder({
         name: name.trim(),
+        addressId,
         phone: phone.trim(),
         address: address.trim(),
         items: items.map((item) => ({

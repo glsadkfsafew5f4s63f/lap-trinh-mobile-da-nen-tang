@@ -48,3 +48,13 @@ exports.remove = async (req, res) => {
     }
 };
 
+exports.search = async (req, res) => {
+    try {
+        const keyword = `%${req.query.keyword || ''}%`;
+        const data = await Sanphamchuongtrinhgiamgia.search(keyword);
+        res.json({ success: true, data });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+

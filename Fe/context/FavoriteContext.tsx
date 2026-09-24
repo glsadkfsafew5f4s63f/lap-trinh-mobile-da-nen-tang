@@ -3,7 +3,6 @@ import { createContext, ReactNode, useContext, useEffect, useMemo, useState } fr
 
 import { favoriteIds, getProductById, Product } from '../data/products';
 import { mockUser } from '../data/user';
-import { toggleFavoriteApi } from '../services/api';
 import { useAuth } from './AuthContext';
 
 type FavoriteContextValue = {
@@ -95,9 +94,6 @@ export function FavoriteProvider({ children }: { children: ReactNode }) {
         setError(null);
         AsyncStorage.setItem(FAVORITE_STORAGE_KEY, JSON.stringify({ ...idsByUser, [userKey]: nextIds }));
 
-        toggleFavoriteApi(user.id, Number(productId), ids.includes(productId)).catch(() => {
-          setError('Không cập nhật được yêu thích trên server, dữ liệu local đã được lưu.');
-        });
       },
     };
   }, [error, ids, isLoading, user, userKey, idsByUser]);

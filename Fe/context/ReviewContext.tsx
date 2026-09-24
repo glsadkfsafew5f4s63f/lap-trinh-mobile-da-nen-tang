@@ -15,7 +15,7 @@ export type ProductReview = {
 type ReviewContextValue = {
   getReviews: (productId: string) => ProductReview[];
   loadReviews: (productId: string) => Promise<void>;
-  addReview: (review: Omit<ProductReview, 'id' | 'date'>, orderId?: string) => Promise<string | null>;
+  addReview: (review: Omit<ProductReview, 'id' | 'date'>, orderId?: string, detailId?: number) => Promise<string | null>;
 };
 
 const ReviewContext = createContext<ReviewContextValue | null>(null);
@@ -35,21 +35,21 @@ export function ReviewProvider({ children }: { children: ReactNode }) {
         try {
           const rows = await getApiReviews(Number(productId));
           const remoteReviews: ProductReview[] = rows.map((row) => ({
-            id: String(row.id),
-            productId: String(row.productId),
-            author: row.author,
-            stars: Number(row.stars),
-            comment: row.comment,
-            date: row.date ? new Date(row.date).toLocaleDateString('vi-VN') : '',
-            reply: row.reply || '',
+            id: String(row.MaDanhGia),
+            productId: String(row.MaSanPham),
+            author: row.HoTen,
+            stars: Number(row.SoSao),
+            comment: row.NoiDung || '',
+            date: row.NgayDanhGia ? new Date(row.NgayDanhGia).toLocaleDateString('vi-VN') : '',
+            reply: row.NoiDungPhanHoi || '',
           }));
           setReviewsByUser((allUsers) => ({ ...allUsers, [userKey]: remoteReviews }));
         } catch {
           // Keep local reviews as a fallback when the API is unavailable.
         }
       },
-      async addReview(review: Omit<ProductReview, 'id' | 'date'>, orderId?: string) {
-        if (!user?.id || !orderId) {
+      async addReview(review: Omit<ProductReview, 'id' | 'date'>, orderId?: string, detailId?: number) {
+        if (!user?.id || !orderId || !detailId) {
           return 'Bạn cần đăng nhập và có đơn hàng hợp lệ để đánh giá.';
         }
 
@@ -63,6 +63,7 @@ export function ReviewProvider({ children }: { children: ReactNode }) {
             userId: user.id,
             productId: Number(review.productId),
             orderId: numericOrderId,
+            detailId,
             stars: review.stars,
             comment: review.comment,
           });

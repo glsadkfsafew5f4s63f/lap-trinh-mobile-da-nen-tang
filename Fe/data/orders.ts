@@ -1,6 +1,7 @@
 export type OrderStatus = 'Chờ xác nhận' | 'Đã xác nhận' | 'Đang giao' | 'Đã giao' | 'Đã hủy';
 
 export type OrderItem = {
+  detailId?: number;
   productId: string;
   variantId?: number;
   sku?: string;

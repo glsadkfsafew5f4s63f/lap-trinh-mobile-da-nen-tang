@@ -3,11 +3,11 @@ import { createContext, ReactNode, useContext, useEffect, useMemo, useState } fr
 
 import { getOrderTotal, mockOrders, Order, OrderItem } from '../data/orders';
 import { mockUser } from '../data/user';
-import { getProductById } from '../data/products';
-import { CHAT_SOCKET_URL, createOrderApi, getApiOrders, OrderApiRecord } from '../services/api';
+import { createOrderApi, getApiOrders, OrderApiRecord } from '../services/api';
 import { useAuth } from './AuthContext';
 
 type NewOrderInput = {
+  addressId?: number;
   name: string;
   phone: string;
   address: string;
@@ -32,29 +32,30 @@ function mapApiOrder(row: OrderApiRecord, index: number): Order {
   return {
     id: row.MaDonHang ? `DH${String(row.MaDonHang).padStart(3, '0')}` : `DH${String(index + 1).padStart(3, '0')}`,
     date: row.NgayDat ? new Date(row.NgayDat).toLocaleDateString('vi-VN') : new Date().toLocaleDateString('vi-VN'),
-    status: row.TrangThai === 'DaXacNhan'
+    status: row.TrangThaiDonHang === 'DA_XAC_NHAN'
       ? 'Đã xác nhận'
-      : row.TrangThai === 'DangGiao'
+      : row.TrangThaiDonHang === 'DANG_GIAO'
         ? 'Đang giao'
-        : row.TrangThai === 'DaGiao'
+        : row.TrangThaiDonHang === 'DA_GIAO'
           ? 'Đã giao'
-          : row.TrangThai === 'DaHuy'
+          : row.TrangThaiDonHang === 'DA_HUY'
             ? 'Đã hủy'
             : 'Chờ xác nhận',
     payment: 'COD',
-    deposit: Number(row.TienCoc || 0),
-    remaining: Number(row.TienConLai || 0),
+    deposit: 0,
+    remaining: Number(row.ThanhTien || 0),
     paymentStatus: row.TrangThaiThanhToan || 'ChuaCoc',
-    name: row.HoTenNguoiNhan,
-    phone: row.SoDienThoaiNguoiNhan,
-    address: row.DiaChiGiaoHang,
-    shippingFee: Number(row.PhiVanChuyen || 30000),
+    name: row.TenNguoiNhan || '',
+    phone: row.SoDienThoaiNhan || '',
+    address: row.DiaChiGiaoHang || '',
+    shippingFee: Number(row.PhiGiaoHang || 0),
     items: (row.items ?? []).map((item) => ({
+      detailId: item.MaChiTietDonHang,
       productId: String(item.MaSanPham),
       variantId: item.MaBienThe,
       sku: item.SKU,
-      color: item.Mau,
-      size: item.KichThuoc,
+      color: item.TenMau,
+      size: item.TenKichThuoc,
       quantity: Number(item.SoLuong),
       price: Number(item.DonGia),
     })),
@@ -105,7 +106,7 @@ export function OrderProvider({ children }: { children: ReactNode }) {
         }
       });
 
-    getApiOrders(user.id)
+    getApiOrders()
       .then((rows) => {
         if (!active) {
           return;
@@ -119,18 +120,8 @@ export function OrderProvider({ children }: { children: ReactNode }) {
         setError('Không kết nối được server đơn hàng, đang dùng dữ liệu local.');
       });
 
-    const socket = new WebSocket(CHAT_SOCKET_URL);
-    socket.onmessage = (event) => {
-      const payload = JSON.parse(event.data) as { type?: string; order?: { MaNguoiDung?: number } };
-      if (payload.type !== 'order.delivered' || Number(payload.order?.MaNguoiDung) !== user.id) return;
-      getApiOrders(user.id).then((rows) => {
-        if (active) setOrdersByUser((current) => ({ ...current, [userKey]: rows.map(mapApiOrder) }));
-      }).catch(() => undefined);
-    };
-
     return () => {
       active = false;
-      socket.close();
     };
   }, [user, userKey]);
 
@@ -162,38 +153,12 @@ export function OrderProvider({ children }: { children: ReactNode }) {
         };
 
         if (user && user.id) {
-          const response = await createOrderApi({
-            MaNguoiDung: user.id,
-            HoTenNguoiNhan: input.name,
-            SoDienThoaiNguoiNhan: input.phone,
-            DiaChiGiaoHang: input.address,
-            TongTien: input.items.reduce((sum, item) => sum + item.price * item.quantity, 0) + 30000,
-            PhiVanChuyen: 30000,
-            PhuongThucThanhToan: 'Coc 20% + COD',
-            TienCoc: input.deposit,
-            TienConLai: input.remaining,
-            TrangThaiThanhToan: 'ChuaCoc',
-            items: input.items.map((item) => {
-              const product = getProductById(item.productId);
-              const variant = product?.variants?.find(
-                (candidate) => candidate.color === item.color && candidate.size === item.size
-              );
-              return {
-                variantId: item.variantId && item.variantId > 0 ? item.variantId : variant?.id ?? 0,
-                productId: item.productId,
-                quantity: item.quantity,
-                price: item.price,
-                color: item.color ?? variant?.color ?? '',
-                size: item.size ?? variant?.size ?? '',
-                name: product?.name ?? item.productId,
-              };
-            }),
-          }).catch(() => {
+          const response = await createOrderApi({ MaDiaChi: input.addressId, userId: user.id, name: input.name, phone: input.phone, address: input.address, PhuongThuc: 'COD', PhiGiaoHang: 30000 }).catch(() => {
             setError('Tạo đơn hàng chưa đồng bộ với server, dữ liệu local đã được lưu.');
             return null;
           });
-          if (response?.data?.insertId) {
-            order.id = `DH${String(response.data.insertId).padStart(3, '0')}`;
+          if (response?.data?.MaDonHang) {
+            order.id = `DH${String(response.data.MaDonHang).padStart(3, '0')}`;
           }
         }
 

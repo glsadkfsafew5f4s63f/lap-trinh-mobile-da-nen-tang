@@ -27,4 +27,9 @@ Bienthechuongtrinhgiamgia.delete = async (id) => {
     return { affectedRows: result.affectedRows };
 };
 
+Bienthechuongtrinhgiamgia.search = async (keyword) => {
+    const [rows] = await db.query('SELECT * FROM `bienthechuongtrinhgiamgia` WHERE CAST(`MaBienThe` AS CHAR) LIKE ? OR CAST(`MaChuongTrinh` AS CHAR) LIKE ?', [keyword, keyword]);
+    return rows;
+};
+
 module.exports = Bienthechuongtrinhgiamgia;

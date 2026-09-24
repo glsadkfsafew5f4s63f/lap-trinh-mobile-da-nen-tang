@@ -1,4 +1,4 @@
-import { API_BASE_URL, getApiProductImages, getApiProductVariants, getApiProducts } from '../services/api';
+import { API_BASE_URL, getApiProductVariants, getApiProducts } from '../services/api';
 
 const p = (id: string, w = 900) =>
   `https://images.pexels.com/photos/${id}/pexels-photo-${id}.jpeg?auto=compress&cs=tinysrgb&w=${w}`;
@@ -832,10 +832,7 @@ function parseApiImages(value: unknown): Product['images'] {
 }
 
 export async function loadProductsFromApi() {
-  const [apiProducts, imageResponse] = await Promise.all([
-    getApiProducts(),
-    getApiProductImages(),
-  ]);
+  const apiProducts = await getApiProducts();
   const apiVariants = await Promise.all(
     apiProducts.map(async (apiProduct) => ({
       productId: apiProduct.id,
@@ -843,21 +840,12 @@ export async function loadProductsFromApi() {
     })),
   );
   const variantsByProduct = new Map(apiVariants.map((item) => [item.productId, item.variants]));
-  const imagesByProduct = new Map<number, string[]>();
-
-  for (const image of imageResponse.data ?? []) {
-    const current = imagesByProduct.get(image.MaSanPham) ?? [];
-    current.push(resolveImageUrl(image.DuongDanAnh));
-    imagesByProduct.set(image.MaSanPham, current);
-  }
-
   const localProducts = [...products];
   const nextProducts = apiProducts.map((apiProduct) => {
     const localProduct = localProducts.find(
       (item) => item.sqlId === apiProduct.id || item.id === String(apiProduct.id),
     );
-    const images = imagesByProduct.get(apiProduct.id)?.filter(Boolean)
-      ?? parseApiImages(apiProduct.images);
+    const images = parseApiImages(apiProduct.images);
     const resolvedImages = images.length > 0 ? images : localProduct?.images ?? [];
     const apiProductVariants = variantsByProduct.get(apiProduct.id) ?? [];
     const colorNames = Array.from(new Set(apiProductVariants.map((variant) => variant.color)));
@@ -910,6 +898,8 @@ export async function loadProductsFromApi() {
   if (nextProducts.length > 0) {
     products.splice(0, products.length, ...nextProducts);
   }
+
+  return nextProducts.length > 0 ? nextProducts : [...products];
 }
 
 export const favoriteIds = ['1', '5', '6'];

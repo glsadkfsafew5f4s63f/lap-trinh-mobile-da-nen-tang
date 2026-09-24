@@ -1,10 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { Alert, FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { colors, radius } from '../constants/theme';
 import { useAuth } from '../context/AuthContext';
-import { CHAT_SOCKET_URL, ChatMessage, getChatMessages, sendChatMessage } from '../services/api';
+type ChatMessage = { id: string; sender: string; message: string; date: string };
 
 export default function ChatScreen() {
   const { user } = useAuth();
@@ -12,36 +12,12 @@ export default function ChatScreen() {
   const [text, setText] = useState('');
   const listRef = useRef<FlatList<ChatMessage>>(null);
 
-  useEffect(() => {
-    if (!user?.id) return;
-    let active = true;
-    const load = () => getChatMessages(user.id!).then((rows) => active && setMessages(rows)).catch(() => undefined);
-    load();
-    let retryTimer: ReturnType<typeof setTimeout> | undefined;
-    let socket: WebSocket;
-    const connect = () => {
-      socket = new WebSocket(CHAT_SOCKET_URL);
-      socket.onmessage = (event) => {
-        const payload = JSON.parse(event.data) as { type?: string; message?: ChatMessage };
-        const message = payload.message;
-        if (payload.type === 'chat.message' && message && Number(message.userId) === user.id) {
-          setMessages((current) => current.some((item) => item.id === message.id) ? current : [...current, message]);
-        }
-      };
-      socket.onclose = () => { if (active) retryTimer = setTimeout(connect, 2000); };
-      socket.onerror = () => socket.close();
-    };
-    connect();
-    return () => { active = false; if (retryTimer) clearTimeout(retryTimer); socket?.close(); };
-  }, [user?.id]);
-
   async function send() {
     const message = text.trim();
     if (!user?.id || !message) return;
     try {
-      await sendChatMessage(user.id, 'NguoiDung', message);
       setText('');
-      setMessages(await getChatMessages(user.id));
+      setMessages((current) => [...current, { id: `${Date.now()}`, sender: 'NguoiDung', message, date: new Date().toISOString() }]);
       setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 50);
     } catch (error) {
       Alert.alert('Không thể gửi tin nhắn', error instanceof Error ? error.message : 'Vui lòng thử lại.');
