@@ -16,15 +16,23 @@ type Props = CompositeScreenProps<
 >;
 
 export default function FavoriteScreen({ navigation }: Props) {
-  const { items } = useFavorites();
+  const { items, isLoading, error } = useFavorites();
   const insets = useSafeAreaInsets();
+
+  if (isLoading) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top, justifyContent: 'center', alignItems: 'center' }]}> 
+        <Text style={styles.loadingText}>Đang tải yêu thích...</Text>
+      </View>
+    );
+  }
 
   if (items.length === 0) {
     return (
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <EmptyState
-          title="Chưa có yêu thích"
-          message="Bấm trái tim trên ảnh sản phẩm để lưu lại."
+          title={error ? 'Không tải được yêu thích' : 'Chưa có yêu thích'}
+          message={error ?? 'Bấm trái tim trên ảnh sản phẩm để lưu lại.'}
           icon="heart-outline"
         />
       </View>
@@ -84,5 +92,10 @@ const styles = StyleSheet.create({
   },
   cell: {
     width: '50%',
+  },
+  loadingText: {
+    color: colors.muted,
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

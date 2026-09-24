@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { FlatList, StyleSheet, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
+import { loadProductsFromApi, products } from '../data/products';
+
 import { AppInput } from '../components/AppInput';
 import { EmptyState } from '../components/EmptyState';
 import { FilterChip } from '../components/FilterChip';
@@ -22,6 +24,21 @@ export default function ProductListScreen({ navigation, route }: Props) {
   const [category, setCategory] = useState(route.params?.category ?? '');
   const [brand, setBrand] = useState('');
   const [sort, setSort] = useState<PriceSort>('none');
+  const [productList, setProductList] = useState(products);
+
+  useEffect(() => {
+    let active = true;
+
+    loadProductsFromApi().then((data) => {
+      if (active) {
+        setProductList(data);
+      }
+    });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     setCategory(route.params?.category ?? '');
@@ -34,8 +51,8 @@ export default function ProductListScreen({ navigation, route }: Props) {
         category: category || undefined,
         brand: brand || undefined,
         sort,
-      }),
-    [query, category, brand, sort]
+      }).filter((item) => productList.some((entry) => entry.id === item.id)),
+    [query, category, brand, sort, productList]
   );
 
   return (

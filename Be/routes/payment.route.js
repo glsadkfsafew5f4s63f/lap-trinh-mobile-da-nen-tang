@@ -1,0 +1,1 @@
+const router=require('express').Router(); const c=require('../controllers/payment.controller'); const auth=require('../middleware/auth'); router.use(auth); router.post('/:orderId/retry',c.retry); module.exports=router;

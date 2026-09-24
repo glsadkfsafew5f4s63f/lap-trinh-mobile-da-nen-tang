@@ -1,0 +1,1 @@
+const router=require('express').Router(); const c=require('../controllers/adminCatalog.controller'); const auth=require('../middleware/auth'); const role=require('../middleware/role'); router.use(auth,role('ADMIN','NHAN_VIEN')); router.get('/:type',c.list); router.post('/:type',c.create); router.put('/:type/:id',c.update); module.exports=router;

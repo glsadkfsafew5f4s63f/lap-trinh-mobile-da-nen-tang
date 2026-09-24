@@ -1,0 +1,46 @@
+EXPO GO - CẤU HÌNH KẾT NỐI API
+
+1. Máy tính chạy Node.js và điện thoại phải cùng mạng LAN.
+2. Không dùng localhost trên Expo Go.
+3. Lấy IPv4 của máy Windows bằng ipconfig.
+4. Ví dụ máy có IP 192.168.1.10:
+   API_BASE_URL=http://192.168.1.10:7000/api
+
+Web Admin chạy trên cùng máy có thể dùng:
+   http://localhost:7000/api
+
+Các API chính:
+POST /auth/register
+POST /auth/login
+GET  /auth/me
+GET  /catalog/categories
+GET  /catalog/brands
+GET  /catalog/colors
+GET  /catalog/sizes
+GET  /products
+GET  /products/:id
+GET  /cart
+POST /cart/items
+PUT  /cart/items/:id
+DELETE /cart/items/:id
+POST /orders/voucher/preview
+POST /orders
+GET  /orders
+GET  /orders/:id
+PUT  /orders/:id/cancel
+GET  /reviews/product/:productId
+POST /reviews
+POST /payments/:orderId/retry
+GET  /user/addresses
+POST /user/addresses
+PUT  /user/addresses/:id
+DELETE /user/addresses/:id
+GET  /admin/dashboard
+GET  /admin/users
+GET  /admin/orders
+PUT  /admin/orders/:id/status
+GET  /admin/inventory
+GET  /admin/purchase-orders
+PUT  /admin/purchase-orders/:id/approve
+GET  /admin/reviews
+PUT  /admin/reviews/:id/reply

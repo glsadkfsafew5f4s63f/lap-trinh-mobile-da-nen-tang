@@ -2,8 +2,12 @@ export type OrderStatus = 'Chờ xác nhận' | 'Đã xác nhận' | 'Đang giao
 
 export type OrderItem = {
   productId: string;
+  variantId?: number;
+  sku?: string;
   colorIndex?: number;
   sizeIndex?: number;
+  color?: string;
+  size?: string;
   quantity: number;
   price: number;
 };
@@ -12,7 +16,10 @@ export type Order = {
   id: string;
   date: string;
   status: OrderStatus;
-  payment: 'COD';
+  payment: string;
+  deposit?: number;
+  remaining?: number;
+  paymentStatus?: string;
   shippingFee: number;
   name: string;
   phone: string;

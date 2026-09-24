@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Image } from 'expo-image';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
     Alert,
     Dimensions,
@@ -19,6 +19,7 @@ import { QuantityStepper } from '../components/QuantityStepper';
 import { colors, radius } from '../constants/theme';
 import { useCart } from '../context/CartContext';
 import { useFavorites } from '../context/FavoriteContext';
+import { useOrders } from '../context/OrderContext';
 import { useReviews } from '../context/ReviewContext';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -26,6 +27,7 @@ import {
     getProductById,
     getProductVariantStock,
     getRelatedProducts,
+    loadProductsFromApi,
 } from '../data/products';
 import type { RootStackParamList } from './types';
 
@@ -34,11 +36,28 @@ type Props = NativeStackScreenProps<RootStackParamList, 'ProductDetail'>;
 const { width } = Dimensions.get('window');
 
 export default function ProductDetailScreen({ navigation, route }: Props) {
-  const product = getProductById(route.params.productId);
+  const [product, setProduct] = useState(() => getProductById(route.params.productId));
   const { addToCart } = useCart();
   const { isFavorite, toggle } = useFavorites();
-  const { getReviews } = useReviews();
+  const { orders } = useOrders();
+  const { getReviews, loadReviews } = useReviews();
   const { user } = useAuth();
+
+  useEffect(() => {
+    let active = true;
+
+    loadProductsFromApi().then(() => {
+      if (active) {
+        setProduct(getProductById(route.params.productId));
+      }
+    });
+
+    void loadReviews(route.params.productId);
+
+    return () => {
+      active = false;
+    };
+  }, [route.params.productId]);
   const galleryRef = useRef<ScrollView>(null);
   const [galleryIndex, setGalleryIndex] = useState(0);
   const [colorIndex, setColorIndex] = useState(0);
@@ -59,7 +78,16 @@ export default function ProductDetailScreen({ navigation, route }: Props) {
   const reviews = getReviews(product.id);
   const selectedColor = product.colors[colorIndex];
   const selectedSize = product.sizes[sizeIndex];
+  const selectedVariant = product.variants?.find(
+    (variant) => variant.color === selectedColor?.name && variant.size === selectedSize
+  );
   const selectedStock = getProductVariantStock(product, colorIndex, sizeIndex);
+  const reviewAverage = reviews.length > 0
+    ? reviews.reduce((sum, review) => sum + review.stars, 0) / reviews.length
+    : 0;
+  const reviewOrder = orders.find((order) =>
+    order.status === 'Đã giao' && order.items.some((item) => item.productId === product.id)
+  );
 
   function onGalleryScroll(event: NativeSyntheticEvent<NativeScrollEvent>) {
     setGalleryIndex(Math.round(event.nativeEvent.contentOffset.x / width));
@@ -80,7 +108,7 @@ export default function ProductDetailScreen({ navigation, route }: Props) {
       Alert.alert('Biến thể tạm hết hàng', 'Vui lòng chọn màu hoặc kích thước khác.');
       return;
     }
-    addToCart(product.id, colorIndex, sizeIndex, quantity);
+    addToCart(product.id, colorIndex, sizeIndex, quantity, selectedVariant?.id, selectedVariant?.sku);
     Alert.alert(
       'Đã thêm vào giỏ',
       `${product.name}\n${selectedColor?.name} · ${selectedSize} · x${quantity}`,
@@ -157,11 +185,19 @@ export default function ProductDetailScreen({ navigation, route }: Props) {
           <View style={styles.ratingRow}>
             <Ionicons name="star" size={14} color={colors.star} />
             <Text style={styles.ratingText}>
-              {product.rating.toFixed(1)} · {product.reviewCount} đánh giá
+              {reviews.length > 0 ? `${reviewAverage.toFixed(1)} · ${reviews.length} đánh giá` : 'Chưa có đánh giá'}
             </Text>
           </View>
           <Text style={styles.price}>{formatPrice(product.price)}</Text>
+          {selectedVariant?.sku ? <Text style={styles.sku}>Mã sản phẩm: {selectedVariant.sku}</Text> : null}
           <Text style={styles.description}>{product.description}</Text>
+
+          <View style={styles.highlightPanel}>
+            <Text style={styles.highlightTitle}>Điểm nổi bật</Text>
+            <View style={styles.highlightRow}><Ionicons name="sparkles-outline" size={17} color={colors.accent} /><Text style={styles.highlightText}>Thiết kế dễ phối, phù hợp nhiều hoàn cảnh sử dụng.</Text></View>
+            <View style={styles.highlightRow}><Ionicons name="leaf-outline" size={17} color={colors.accent} /><Text style={styles.highlightText}>Chất liệu được chọn để mặc thoải mái cả ngày.</Text></View>
+            <View style={styles.highlightRow}><Ionicons name="shield-checkmark-outline" size={17} color={colors.accent} /><Text style={styles.highlightText}>Kiểm tra sản phẩm trước khi nhận hàng.</Text></View>
+          </View>
 
           <Text style={styles.label}>Màu sắc · {selectedColor?.name}</Text>
           <View style={styles.row}>
@@ -226,14 +262,34 @@ export default function ProductDetailScreen({ navigation, route }: Props) {
               <Text style={styles.reviewTitle}>Đánh giá sản phẩm</Text>
               <View style={styles.reviewSummary}>
                 <Ionicons name="star" size={15} color={colors.star} />
-                <Text style={styles.reviewScore}>{product.rating.toFixed(1)}</Text>
+                <Text style={styles.reviewScore}>{reviewAverage.toFixed(1)}</Text>
                 <Text style={styles.reviewCount}>
-                  {product.reviewCount + reviews.length} đánh giá
+                  {reviews.length > 0 ? `${reviews.length} đánh giá` : 'Chưa có đánh giá'}
                 </Text>
               </View>
             </View>
             <Ionicons name="chatbubble-ellipses-outline" size={22} color={colors.accent} />
           </View>
+          <Pressable
+            style={styles.writeReviewButton}
+            onPress={() => {
+              if (!user) {
+                Alert.alert('Cần đăng nhập', 'Đăng nhập để viết đánh giá sản phẩm.', [
+                  { text: 'Để sau' },
+                  { text: 'Đăng nhập', onPress: () => navigation.navigate('Login') },
+                ]);
+                return;
+              }
+              if (!reviewOrder) {
+                Alert.alert('Chưa đủ điều kiện', 'Bạn chỉ có thể đánh giá sau khi đơn hàng chứa sản phẩm này đã giao thành công.');
+                return;
+              }
+              navigation.navigate('ProductReview', { orderId: reviewOrder.id, productId: product.id });
+            }}
+          >
+            <Ionicons name="create-outline" size={18} color={colors.accent} />
+            <Text style={styles.writeReviewText}>{reviewOrder ? 'Viết đánh giá và bình luận' : 'Đánh giá sau khi nhận hàng'}</Text>
+          </Pressable>
           {reviews.length > 0 ? (
             reviews.slice(0, 2).map((review) => (
               <View key={review.id} style={styles.reviewCard}>
@@ -252,6 +308,7 @@ export default function ProductDetailScreen({ navigation, route }: Props) {
                   ))}
                 </View>
                 <Text style={styles.reviewComment}>{review.comment}</Text>
+                {review.reply ? <View style={styles.adminReply}><Text style={styles.adminReplyLabel}>Admin phản hồi</Text><Text style={styles.adminReplyText}>{review.reply}</Text></View> : null}
               </View>
             ))
           ) : (
@@ -285,7 +342,11 @@ export default function ProductDetailScreen({ navigation, route }: Props) {
           <Text style={styles.footerLabel}>Tạm tính</Text>
           <Text style={styles.footerPrice}>{formatPrice(product.price * quantity)}</Text>
         </View>
-        <Pressable style={styles.cartBtn} onPress={addProduct}>
+        <Pressable
+          style={[styles.cartBtn, selectedStock === 0 && styles.cartBtnDisabled]}
+          onPress={addProduct}
+          disabled={selectedStock === 0}
+        >
           <Ionicons name="bag-add-outline" size={18} color="#fff" />
           <Text style={styles.cartText}>THÊM VÀO GIỎ</Text>
         </Pressable>
@@ -394,6 +455,35 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     color: '#4A453F',
   },
+  highlightPanel: {
+    marginTop: 18,
+    padding: 15,
+    borderRadius: radius.md,
+    backgroundColor: '#FBF4EC',
+    gap: 10,
+  },
+  highlightTitle: {
+    color: colors.ink,
+    fontWeight: '800',
+    fontSize: 15,
+  },
+  highlightRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 9,
+  },
+  highlightText: {
+    flex: 1,
+    color: '#625A51',
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  sku: {
+    marginTop: 6,
+    fontSize: 12,
+    color: colors.muted,
+    fontWeight: '600',
+  },
   label: {
     marginTop: 22,
     marginBottom: 10,
@@ -486,6 +576,22 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  writeReviewButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 12,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: colors.accent,
+    borderRadius: radius.md,
+  },
+  writeReviewText: {
+    color: colors.accent,
+    fontWeight: '800',
+    fontSize: 13,
+  },
   reviewTitle: {
     fontSize: 18,
     fontWeight: '700',
@@ -534,6 +640,23 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 19,
     marginTop: 7,
+  },
+  adminReply: {
+    marginTop: 10,
+    padding: 10,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.accent,
+    backgroundColor: '#FBF4EC',
+  },
+  adminReplyLabel: {
+    color: colors.accent,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  adminReplyText: {
+    color: '#625A51',
+    marginTop: 3,
+    lineHeight: 18,
   },
   noReviews: {
     color: colors.muted,
@@ -593,6 +716,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     flexDirection: 'row',
     gap: 8,
+  },
+  cartBtnDisabled: {
+    opacity: 0.5,
   },
   cartText: {
     color: '#fff',

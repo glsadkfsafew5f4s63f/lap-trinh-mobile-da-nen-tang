@@ -1,27 +1,71 @@
-import { createContext, ReactNode, useContext, useMemo, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from 'react';
 
 import { User } from '../data/user';
 import { loginApiUser, registerApiUser } from '../services/api';
 
 type AuthContextValue = {
   user: User | null;
+  isReady: boolean;
   login: (phone: string, password: string) => Promise<string | null>;
   register: (name: string, phone: string, password: string) => Promise<string | null>;
   logout: () => void;
   updateUser: (data: Partial<User>) => void;
 };
 
+const AUTH_STORAGE_KEY = '@anhuyqa:user';
+
 function normalizePhone(phone: string) {
   return phone.replace(/[\s()-]/g, '').trim();
+}
+
+function persistUser(user: User | null) {
+  if (!user) {
+    return AsyncStorage.removeItem(AUTH_STORAGE_KEY).catch(() => undefined);
+  }
+
+  return AsyncStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(user)).catch(() => undefined);
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [isReady, setIsReady] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    AsyncStorage.getItem(AUTH_STORAGE_KEY)
+      .then((storedUser) => {
+        if (!isMounted) {
+          return;
+        }
+
+        if (storedUser) {
+          try {
+            setUser(JSON.parse(storedUser) as User);
+          } catch {
+            setUser(null);
+          }
+        }
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (isMounted) {
+          setIsReady(true);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const value = useMemo(
     () => ({
       user,
+      isReady,
       async login(phone: string, password: string) {
         const normalizedPhone = normalizePhone(phone);
         if (!normalizedPhone || !password.trim()) {
@@ -33,6 +77,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         try {
           const response = await loginApiUser(normalizedPhone, password);
           setUser(response.data);
+          await persistUser(response.data);
           return null;
         } catch (error) {
           return error instanceof Error ? error.message : 'Không thể đăng nhập.';
@@ -49,6 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         try {
           const response = await registerApiUser(name.trim(), normalizedPhone, password);
           setUser(response.data);
+          await persistUser(response.data);
           return null;
         } catch (error) {
           return error instanceof Error ? error.message : 'Không thể đăng ký.';
@@ -56,18 +102,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       logout() {
         setUser(null);
+        persistUser(null);
       },
       updateUser(data: Partial<User>) {
         setUser((current) => {
           if (!current) {
             return current;
           }
+
           const updatedUser = { ...current, ...data };
+          void persistUser(updatedUser);
           return updatedUser;
         });
       },
     }),
-    [user]
+    [isReady, user]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

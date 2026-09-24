@@ -6,17 +6,20 @@ type Props = {
   label: string;
   onPress: () => void;
   variant?: 'fill' | 'outline' | 'soft';
+  disabled?: boolean;
 };
 
-export function AppButton({ label, onPress, variant = 'fill' }: Props) {
+export function AppButton({ label, onPress, variant = 'fill', disabled = false }: Props) {
   return (
     <Pressable
       onPress={onPress}
+      disabled={disabled}
       style={[
         styles.base,
         variant === 'fill' && styles.fill,
         variant === 'outline' && styles.outline,
         variant === 'soft' && styles.soft,
+        disabled && styles.disabled,
       ]}
     >
       <Text
@@ -49,6 +52,9 @@ const styles = StyleSheet.create({
   },
   soft: {
     backgroundColor: colors.accentSoft,
+  },
+  disabled: {
+    opacity: 0.5,
   },
   text: {
     fontSize: 13,

@@ -1,7 +1,9 @@
-import { createContext, ReactNode, useContext, useMemo, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from 'react';
 
 import { getProductById, getProductVariantStock, Product } from '../data/products';
 import { mockUser } from '../data/user';
+import { addCartItemApi, removeCartItemApi } from '../services/api';
 import { useAuth } from './AuthContext';
 
 export type CartLine = {
@@ -9,25 +11,32 @@ export type CartLine = {
   colorIndex: number;
   sizeIndex: number;
   quantity: number;
+  variantId?: number;
+  sku?: string;
 };
 
 export type CartItem = Product & {
   colorIndex: number;
   sizeIndex: number;
   quantity: number;
+  variantId?: number;
+  sku?: string;
 };
 
 type CartContextValue = {
   items: CartItem[];
   itemCount: number;
   total: number;
-  addToCart: (productId: string, colorIndex: number, sizeIndex: number, quantity?: number) => void;
+  addToCart: (productId: string, colorIndex: number, sizeIndex: number, quantity?: number, variantId?: number, sku?: string) => void;
   increase: (productId: string, colorIndex: number, sizeIndex: number) => void;
   decrease: (productId: string, colorIndex: number, sizeIndex: number) => void;
   remove: (productId: string, colorIndex: number, sizeIndex: number) => void;
   clear: () => void;
+  isLoading: boolean;
+  error: string | null;
 };
 
+const CART_STORAGE_KEY = '@anhuyqa:cart';
 const CartContext = createContext<CartContextValue | null>(null);
 
 const initialLines: CartLine[] = [
@@ -41,6 +50,47 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const [linesByUser, setLinesByUser] = useState<Record<string, CartLine[]>>({
     [mockUser.phone]: initialLines,
   });
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+
+    if (!user) {
+      setLinesByUser((current) => ({ ...current, [userKey]: [] }));
+      return () => {
+        active = false;
+      };
+    }
+
+    setIsLoading(true);
+    AsyncStorage.getItem(CART_STORAGE_KEY)
+      .then((stored) => {
+        if (!active || !stored) {
+          return;
+        }
+
+        try {
+          const parsed = JSON.parse(stored) as Record<string, CartLine[]>;
+          setLinesByUser((current) => ({ ...current, [userKey]: parsed[userKey] ?? current[userKey] ?? initialLines }));
+        } catch {
+          setLinesByUser((current) => ({ ...current, [userKey]: current[userKey] ?? initialLines }));
+        }
+      })
+      .catch(() => {
+        setLinesByUser((current) => ({ ...current, [userKey]: current[userKey] ?? initialLines }));
+      })
+      .finally(() => {
+        if (active) {
+          setIsLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [user, userKey]);
+
   const lines = linesByUser[userKey] ?? [];
 
   const value = useMemo(() => {
@@ -48,10 +98,11 @@ export function CartProvider({ children }: { children: ReactNode }) {
       if (!userKey) {
         return;
       }
-      setLinesByUser((current) => ({
-        ...current,
-        [userKey]: updater(current[userKey] ?? []),
-      }));
+      setLinesByUser((current) => {
+        const next = updater(current[userKey] ?? []);
+        AsyncStorage.setItem(CART_STORAGE_KEY, JSON.stringify({ ...current, [userKey]: next }));
+        return { ...current, [userKey]: next };
+      });
     }
 
     const items = lines
@@ -67,7 +118,14 @@ export function CartProvider({ children }: { children: ReactNode }) {
     const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
     const total = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
-    function addToCart(productId: string, colorIndex: number, sizeIndex: number, quantity = 1) {
+    function addToCart(productId: string, colorIndex: number, sizeIndex: number, quantity = 1, variantId?: number, sku?: string) {
+      if (!user || !user.id) {
+        setError('Bạn cần đăng nhập để thêm vào giỏ hàng.');
+        return;
+      }
+
+      const userId = user.id;
+
       updateLines((current) => {
         const product = getProductById(productId);
         const stock = product ? getProductVariantStock(product, colorIndex, sizeIndex) : 0;
@@ -81,15 +139,23 @@ export function CartProvider({ children }: { children: ReactNode }) {
             item.sizeIndex === sizeIndex
         );
         if (found) {
-          return current.map((item) =>
+          const next = current.map((item) =>
             item.productId === productId &&
             item.colorIndex === colorIndex &&
             item.sizeIndex === sizeIndex
-              ? { ...item, quantity: Math.min(stock, item.quantity + quantity) }
+              ? { ...item, quantity: Math.min(stock, item.quantity + quantity), variantId, sku }
               : item
           );
+          addCartItemApi(userId, productId, quantity).catch(() => {
+            setError('Không thể đồng bộ giỏ hàng với server, dữ liệu local đã được lưu.');
+          });
+          return next;
         }
-        return [...current, { productId, colorIndex, sizeIndex, quantity: Math.min(stock, quantity) }];
+        const next = [{ productId, colorIndex, sizeIndex, quantity: Math.min(stock, quantity), variantId, sku }, ...current];
+        addCartItemApi(userId, productId, quantity).catch(() => {
+          setError('Không thể đồng bộ giỏ hàng với server, dữ liệu local đã được lưu.');
+        });
+        return next;
       });
     }
 
@@ -138,14 +204,20 @@ export function CartProvider({ children }: { children: ReactNode }) {
             )
         )
       );
+      if (user && user.id) {
+        removeCartItemApi(Number(productId)).catch(() => {
+          setError('Không thể xóa mục giỏ trên server.');
+        });
+      }
     }
 
     function clear() {
       updateLines(() => []);
+      setError(null);
     }
 
-    return { items, itemCount, total, addToCart, increase, decrease, remove, clear };
-  }, [lines, userKey]);
+    return { items, itemCount, total, addToCart, increase, decrease, remove, clear, isLoading, error };
+  }, [error, isLoading, lines, user, userKey]);
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
 }

@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import type { CompositeScreenProps } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useEffect, useState } from 'react';
 
 import { CategoryCard } from '../components/CategoryCard';
 import { HomeBanner } from '../components/HomeBanner';
@@ -16,6 +17,8 @@ import {
   categories,
   getFeaturedProducts,
   getNewProducts,
+  loadProductsFromApi,
+  products,
 } from '../data/products';
 import type { MainTabParamList, RootStackParamList } from './types';
 
@@ -25,10 +28,29 @@ type Props = CompositeScreenProps<
 >;
 
 export default function HomeScreen({ navigation }: Props) {
-  const featured = getFeaturedProducts();
-  const newest = getNewProducts();
+  const [productList, setProductList] = useState(products);
   const insets = useSafeAreaInsets();
   const { itemCount } = useCart();
+
+  useEffect(() => {
+    let active = true;
+
+    loadProductsFromApi().then((data) => {
+      if (active) {
+        setProductList(data);
+      }
+    });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const featured = getFeaturedProducts();
+  const newest = getNewProducts();
+
+  const sourceFeatured = productList.filter((item) => item.isFeatured);
+  const sourceNewest = productList.filter((item) => item.isNew);
 
   return (
     <ScrollView
@@ -84,7 +106,7 @@ export default function HomeScreen({ navigation }: Props) {
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.horizontalList}
       >
-        {featured.map((item) => (
+        {(sourceFeatured.length > 0 ? sourceFeatured : featured).map((item) => (
           <ProductCard
             key={item.id}
             product={item}
@@ -106,7 +128,7 @@ export default function HomeScreen({ navigation }: Props) {
         onSeeAll={() => navigation.navigate('ProductList', {})}
       />
       <View style={styles.grid}>
-        {newest.map((item) => (
+        {(sourceNewest.length > 0 ? sourceNewest : newest).map((item) => (
           <View key={item.id} style={styles.gridItem}>
             <ProductCard
               product={item}

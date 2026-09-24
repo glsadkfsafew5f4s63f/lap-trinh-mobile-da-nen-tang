@@ -19,16 +19,23 @@ type Props = CompositeScreenProps<
 >;
 
 export default function CartScreen({ navigation }: Props) {
-  const { items, total, increase, decrease, remove } = useCart();
+  const { items, total, increase, decrease, remove, isLoading, error } = useCart();
   const insets = useSafeAreaInsets();
+
+  if (isLoading) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top, justifyContent: 'center', alignItems: 'center' }]}> 
+        <Text style={styles.loadingText}>Đang tải giỏ hàng...</Text>
+      </View>
+    );
+  }
 
   if (items.length === 0) {
     return (
-      <View style={[styles.container, { paddingTop: insets.top }]}>
+      <View style={[styles.container, { paddingTop: insets.top }]}> 
         <EmptyState
-          title="Giỏ hàng trống"
-          message="Chọn màu, size rồi thêm sản phẩm từ trang chi tiết."
-          icon="bag-handle-outline"
+          title={error ? 'Không tải được giỏ hàng' : 'Giỏ hàng trống'}
+          message={error ?? 'Chọn màu, size rồi thêm sản phẩm từ trang chi tiết.'}
         />
       </View>
     );
@@ -57,6 +64,7 @@ export default function CartScreen({ navigation }: Props) {
               <Text style={styles.meta}>
                 {item.colors[item.colorIndex]?.name} · {item.sizes[item.sizeIndex]} · {formatPrice(item.price)}
               </Text>
+              {item.sku ? <Text style={styles.sku}>SKU: {item.sku}</Text> : null}
               <View style={styles.actions}>
                 <QuantityStepper
                   quantity={item.quantity}
@@ -153,6 +161,11 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.muted,
   },
+  sku: {
+    fontSize: 12,
+    color: colors.muted,
+    fontWeight: '600',
+  },
   actions: {
     marginTop: 8,
     flexDirection: 'row',
@@ -195,5 +208,10 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 1.2,
     fontSize: 12,
+  },
+  loadingText: {
+    color: colors.muted,
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

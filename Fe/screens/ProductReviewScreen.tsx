@@ -22,21 +22,25 @@ export default function ProductReviewScreen({ navigation, route }: Props) {
   const [stars, setStars] = useState(5);
   const [comment, setComment] = useState('');
 
-  function submit() {
+  async function submit() {
     if (!order || !product) {
       Alert.alert('Lỗi', 'Không tìm thấy đơn hoặc sản phẩm.');
       return;
     }
-    addReview({
+    const error = await addReview({
       productId: product.id,
       author: 'Bạn',
       stars,
       comment: comment.trim() || 'Sản phẩm đúng mô tả và giao hàng nhanh.',
-    });
+    }, order.id);
+    if (error) {
+      Alert.alert('Không thể gửi đánh giá', error);
+      return;
+    }
     markReviewed(order.id, product.id);
     Alert.alert(
       'Đã gửi đánh giá',
-      `${stars}/5 sao cho ${product.name}. (Lưu local, chưa gửi API)`,
+      `${stars}/5 sao cho ${product.name}. Đánh giá đã được ghi nhận.`,
       [{ text: 'OK', onPress: () => navigation.goBack() }]
     );
   }
