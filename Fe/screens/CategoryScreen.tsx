@@ -6,8 +6,9 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import { CategoryCard } from '../components/CategoryCard';
 import { colors } from '../constants/theme';
-import { categories } from '../data/products';
+import { getApiCategories } from '../services/api';
 import type { MainTabParamList, RootStackParamList } from './types';
+import { useEffect, useState } from 'react';
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<MainTabParamList, 'Category'>,
@@ -16,6 +17,13 @@ type Props = CompositeScreenProps<
 
 export default function CategoryScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
+  const [categories, setCategories] = useState<{ name: string; image: string }[]>([]);
+
+  useEffect(() => {
+    getApiCategories()
+      .then((rows) => setCategories(rows.map((row) => ({ name: String(row.TenDanhMuc || ''), image: String(row.HinhAnh || '') })).filter((category) => category.name)))
+      .catch(() => setCategories([]));
+  }, []);
 
   return (
     <ScrollView

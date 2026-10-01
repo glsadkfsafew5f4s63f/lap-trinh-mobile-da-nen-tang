@@ -7,19 +7,18 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useEffect, useState } from 'react';
 
 import { CategoryCard } from '../components/CategoryCard';
-import { HomeBanner } from '../components/HomeBanner';
 import { HomeSearchBar } from '../components/HomeSearchBar';
 import { ProductCard } from '../components/ProductCard';
 import { SectionHeader } from '../components/SectionHeader';
 import { colors } from '../constants/theme';
 import { useCart } from '../context/CartContext';
 import {
-  categories,
   getFeaturedProducts,
   getNewProducts,
   loadProductsFromApi,
   products,
 } from '../data/products';
+import { getApiCategories } from '../services/api';
 import type { MainTabParamList, RootStackParamList } from './types';
 
 type Props = CompositeScreenProps<
@@ -29,6 +28,7 @@ type Props = CompositeScreenProps<
 
 export default function HomeScreen({ navigation }: Props) {
   const [productList, setProductList] = useState(products);
+  const [categoryList, setCategoryList] = useState<{ name: string; image: string }[]>([]);
   const insets = useSafeAreaInsets();
   const { itemCount } = useCart();
 
@@ -39,6 +39,16 @@ export default function HomeScreen({ navigation }: Props) {
       .then((data) => {
         if (active) {
           setProductList(data);
+        }
+      })
+      .catch(() => undefined);
+    getApiCategories()
+      .then((rows) => {
+        if (active) {
+          setCategoryList(rows.map((row) => ({
+            name: String(row.TenDanhMuc || ''),
+            image: String(row.HinhAnh || ''),
+          })).filter((category) => category.name));
         }
       })
       .catch(() => undefined);
@@ -76,8 +86,6 @@ export default function HomeScreen({ navigation }: Props) {
       </View>
 
       <HomeSearchBar onPress={() => navigation.navigate('ProductList', {})} />
-      <HomeBanner onShop={() => navigation.navigate('ProductList', {})} />
-
       <SectionHeader
         title="Danh mục"
         subtitle="Chọn phong cách của bạn"
@@ -88,7 +96,7 @@ export default function HomeScreen({ navigation }: Props) {
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.categories}
       >
-        {categories.map((category) => (
+        {categoryList.map((category) => (
           <CategoryCard
             key={category.name}
             category={category}
@@ -100,7 +108,7 @@ export default function HomeScreen({ navigation }: Props) {
 
       <SectionHeader
         title="Nổi bật"
-        subtitle="Được yêu thích nhất tuần này"
+        subtitle="Sản phẩm được đánh dấu nổi bật"
         onSeeAll={() => navigation.navigate('ProductList', {})}
       />
       <ScrollView
@@ -118,15 +126,9 @@ export default function HomeScreen({ navigation }: Props) {
         ))}
       </ScrollView>
 
-      <View style={styles.promo}>
-        <Text style={styles.promoKicker}>FREE SHIP</Text>
-        <Text style={styles.promoTitle}>Miễn phí vận chuyển đơn từ 299.000₫</Text>
-        <Text style={styles.promoText}>Đổi trả 7 ngày · COD toàn quốc</Text>
-      </View>
-
       <SectionHeader
         title="Hàng mới"
-        subtitle="Vừa về kệ hôm nay"
+        subtitle="Thêm vào trong 30 ngày gần đây"
         onSeeAll={() => navigation.navigate('ProductList', {})}
       />
       <View style={styles.grid}>
@@ -204,30 +206,6 @@ const styles = StyleSheet.create({
   },
   horizontalList: {
     paddingHorizontal: 20,
-  },
-  promo: {
-    marginHorizontal: 20,
-    marginTop: 28,
-    backgroundColor: colors.ink,
-    borderRadius: 22,
-    padding: 22,
-  },
-  promoKicker: {
-    color: colors.gold,
-    letterSpacing: 2,
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  promoTitle: {
-    color: '#fff',
-    fontSize: 22,
-    fontWeight: '500',
-    marginTop: 8,
-  },
-  promoText: {
-    color: 'rgba(255,255,255,0.72)',
-    marginTop: 8,
-    fontSize: 13,
   },
   grid: {
     flexDirection: 'row',

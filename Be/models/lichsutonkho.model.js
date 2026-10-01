@@ -3,7 +3,17 @@ const Lichsutonkho = {};
 const db = require('../common/db');
 
 Lichsutonkho.getAll = async () => {
-    const [rows] = await db.query('SELECT * FROM `lichsutonkho`');
+    const [rows] = await db.query(`
+        SELECT ls.*, bt.SKU, sp.TenSanPham, pn.SoPhieuNhap,
+               dh.MaDonHangCode, nd.HoTen AS NguoiThucHien
+        FROM LichSuTonKho ls
+        LEFT JOIN BienTheSanPham bt ON bt.MaBienThe = ls.MaBienThe
+        LEFT JOIN SanPham sp ON sp.MaSanPham = bt.MaSanPham
+        LEFT JOIN PhieuNhap pn ON pn.MaPhieuNhap = ls.MaPhieuNhap
+        LEFT JOIN DonHang dh ON dh.MaDonHang = ls.MaDonHang
+        LEFT JOIN NguoiDung nd ON nd.MaNguoiDung = ls.MaNguoiThucHien
+        ORDER BY ls.NgayTao DESC, ls.MaLichSuTonKho DESC
+    `);
     return rows;
 };
 

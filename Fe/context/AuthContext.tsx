@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from 'react';
 
 import { User } from '../data/user';
-import { loginApiUser, logoutApiUser, registerApiUser } from '../services/api';
+import { getApiCurrentUser, loginApiUser, logoutApiUser, registerApiUser, updateApiUser } from '../services/api';
 
 type AuthContextValue = {
   user: User | null;
@@ -10,13 +10,17 @@ type AuthContextValue = {
   login: (phone: string, password: string) => Promise<string | null>;
   register: (name: string, phone: string, password: string) => Promise<string | null>;
   logout: () => void;
-  updateUser: (data: Partial<User>) => void;
+  updateUser: (data: Partial<User>) => Promise<string | null>;
 };
 
 const AUTH_STORAGE_KEY = '@anhuyqa:user';
 
 function normalizePhone(phone: string) {
   return phone.replace(/[\s()-]/g, '').trim();
+}
+
+function isValidPhone(phone: string) {
+  return /^(?:0\d{9}|\+84\d{9})$/.test(phone);
 }
 
 function persistUser(user: User | null) {
@@ -36,21 +40,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let isMounted = true;
 
-    AsyncStorage.getItem(AUTH_STORAGE_KEY)
-      .then((storedUser) => {
-        if (!isMounted) {
-          return;
-        }
-
-        if (storedUser) {
-          try {
-            setUser(JSON.parse(storedUser) as User);
-          } catch {
-            setUser(null);
-          }
-        }
+    getApiCurrentUser()
+      .then(async (currentUser) => {
+        if (!isMounted) return;
+        setUser(currentUser);
+        await persistUser(currentUser);
       })
-      .catch(() => undefined)
+      .catch(async () => {
+        if (!isMounted) return;
+        setUser(null);
+        await logoutApiUser();
+        await persistUser(null);
+      })
       .finally(() => {
         if (isMounted) {
           setIsReady(true);
@@ -71,7 +72,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!normalizedPhone || !password.trim()) {
           return 'Nhập số điện thoại và mật khẩu.';
         }
-        if (!/^((\+84)|0)\d{9,10}$/.test(normalizedPhone)) {
+        if (!isValidPhone(normalizedPhone)) {
           return 'Số điện thoại không hợp lệ.';
         }
         try {
@@ -88,9 +89,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!name.trim() || !normalizedPhone || !password.trim()) {
           return 'Nhập đầy đủ họ tên, số điện thoại và mật khẩu.';
         }
-        if (!/^((\+84)|0)\d{9,10}$/.test(normalizedPhone)) {
+        if (!isValidPhone(normalizedPhone)) {
           return 'Số điện thoại không hợp lệ.';
         }
+        if (password.length < 6) return 'Mật khẩu phải có ít nhất 6 ký tự.';
         try {
           const response = await registerApiUser(name.trim(), normalizedPhone, password);
           setUser(response.data);
@@ -105,16 +107,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         void logoutApiUser();
         persistUser(null);
       },
-      updateUser(data: Partial<User>) {
-        setUser((current) => {
-          if (!current) {
-            return current;
-          }
-
-          const updatedUser = { ...current, ...data };
-          void persistUser(updatedUser);
-          return updatedUser;
-        });
+      async updateUser(data: Partial<User>) {
+        if (!user) return 'Chưa đăng nhập.';
+        try {
+          const response = await updateApiUser({ HoTen: data.name ?? user.name, Email: data.email ?? user.email, DienThoai: data.phone ?? user.phone });
+          const updatedUser = { ...user, name: response.HoTen, email: response.Email || '', phone: response.DienThoai || '' };
+          setUser(updatedUser);
+          await persistUser(updatedUser);
+          return null;
+        } catch (error) {
+          return error instanceof Error ? error.message : 'Không thể cập nhật tài khoản.';
+        }
       },
     }),
     [isReady, user]

@@ -12,56 +12,67 @@ DB_PORT=3306
 DB_USER=root
 DB_PASSWORD=local_password
 DB_NAME=AppBanQuanAo
-PORT=3000
+PORT=7000
 ```
 
 Frontend `.env`:
 
 ```env
-EXPO_PUBLIC_API_URL=http://localhost:3000
+EXPO_PUBLIC_API_URL=http://localhost:7000
 ```
 
-Use `http://10.0.2.2:3000` for Android Emulator or the computer LAN IP for a real phone.
+Use `http://10.0.2.2:7000` for Android Emulator or the computer LAN IP for a real phone.
 
 ## Implemented endpoints
 
 ### `GET /health`
 
-Returns `200` when Node.js can query MySQL:
+Returns `200` when the backend process is available:
 
 ```json
-{ "ok": true, "database": "AppBanQuanAo" }
+{ "success": true, "message": "Backend cửa hàng quần áo đang hoạt động" }
 ```
 
 ### `GET /api/products`
 
 Reads `SanPham`, `DanhMuc`, `ThuongHieu`, and `HinhAnhSanPham`.
 
-### `GET /api/products/:id/variants`
+### `GET /api/products/:id`
 
-Reads `BienTheSanPham`, `MauSac`, and `KichThuoc`. The response contains `id`, `sku`, `color`, `size`, `price`, and `stock`.
+Returns product details, variants with available stock and discount prices, all product images, and visible reviews.
 
-## Endpoints needed for the full app
-
-The backend can add these using the same table names from `shopqa.sql`:
+## Mobile endpoints
 
 ```text
 POST   /api/auth/login                 NguoiDung
 POST   /api/auth/register              NguoiDung
-GET    /api/categories                 DanhMuc
-GET    /api/products/:id/reviews       DanhGia + NguoiDung
-POST   /api/products/:id/reviews       DanhGia
-GET    /api/favorites                  YeuThich
-POST   /api/favorites/:productId       YeuThich
-DELETE /api/favorites/:productId       YeuThich
+GET    /api/auth/me                    NguoiDung + VaiTro
+GET    /api/catalog/categories         DanhMuc
+GET    /api/catalog/brands             ThuongHieu
+GET    /api/catalog/colors             MauSac
+GET    /api/catalog/sizes              KichThuoc
+GET    /api/products/:id               SanPham + BienThe + HinhAnh + DanhGia
+GET    /api/reviews/product/:id        DanhGia + NguoiDung
+POST   /api/reviews                    DanhGia
 GET    /api/cart                       GioHang + ChiTietGioHang
 POST   /api/cart/items                 ChiTietGioHang
-PATCH  /api/cart/items/:variantId      ChiTietGioHang
-DELETE /api/cart/items/:variantId      ChiTietGioHang
+PUT    /api/cart/items/:id             ChiTietGioHang
+DELETE /api/cart/items/:id             ChiTietGioHang
+GET    /api/orders/checkout-config     Shipping policy
+POST   /api/orders/voucher/preview     MaGiamGia + MaGiamGiaNguoiDung
 POST   /api/orders                     DonHang + ChiTietDonHang
 GET    /api/orders                     DonHang
 GET    /api/orders/:id                 DonHang + ChiTietDonHang
+PUT    /api/orders/:id/cancel          DonHang + LichSuDonHang + inventory
+POST   /api/payments/:orderId/retry    ThanhToan
+PUT    /api/user/profile               NguoiDung
+GET    /api/user/addresses             DiaChiGiaoHang
+POST   /api/user/addresses             DiaChiGiaoHang
+PUT    /api/user/addresses/:id         DiaChiGiaoHang
+DELETE /api/user/addresses/:id         DiaChiGiaoHang
 ```
+
+Payment retry currently records a new `ThanhToan` attempt; a real VNPAY/MoMo/bank provider callback is not configured yet. The app does not expose favorites or chat because no corresponding entity/API exists in the schema.
 
 ## Mapping rules
 
@@ -70,7 +81,7 @@ Never use a frontend array index as a database identifier:
 ```text
 Product.id        -> SanPham.MaSanPham
 Variant.id        -> BienTheSanPham.MaBienThe
-Variant.sku       -> BienTheSanPham.MaSKU
+Variant.sku       -> BienTheSanPham.SKU
 colorId           -> MauSac.MaMau
 sizeId            -> KichThuoc.MaKichThuoc
 review productId  -> DanhGia.MaSanPham
@@ -78,4 +89,4 @@ cart item         -> ChiTietGioHang.MaBienThe
 order item        -> ChiTietDonHang.MaBienThe
 ```
 
-The current local mock adapters still use indexes for rendering. When the API is wired into the screens, the backend IDs above must be preserved in the client model.
+The mobile app preserves backend IDs in its client model and does not use local mock records as a fallback.

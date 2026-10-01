@@ -15,12 +15,16 @@ export default function RegisterScreen({ navigation }: Props) {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function submit() {
-    const error = await register(name, phone, password);
-    if (error) {
-      Alert.alert('Không đăng ký được', error);
-      return;
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      const error = await register(name, phone, password);
+      if (error) Alert.alert('Không đăng ký được', error);
+    } finally {
+      setIsSubmitting(false);
     }
   }
 
@@ -46,7 +50,7 @@ export default function RegisterScreen({ navigation }: Props) {
         label="Mật khẩu"
       />
       <View style={{ height: 20 }} />
-      <AppButton label="ĐĂNG KÝ" onPress={submit} />
+      <AppButton label={isSubmitting ? 'ĐANG TẠO TÀI KHOẢN...' : 'ĐĂNG KÝ'} disabled={isSubmitting} onPress={submit} />
       <Pressable onPress={() => navigation.navigate('Login')}>
         <Text style={styles.link}>Đã có tài khoản? Đăng nhập</Text>
       </Pressable>

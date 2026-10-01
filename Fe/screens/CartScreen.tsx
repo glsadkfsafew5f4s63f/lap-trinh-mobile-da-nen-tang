@@ -55,7 +55,7 @@ export default function CartScreen({ navigation }: Props) {
         }
         renderItem={({ item }) => (
           <View style={[styles.row, shadow.card]}>
-            <Pressable onPress={() => navigation.navigate('ProductDetail', { productId: item.id })}>
+            <Pressable disabled={!item.openable} onPress={() => navigation.navigate('ProductDetail', { productId: item.id })}>
               <Image source={{ uri: item.image }} style={styles.image} contentFit="cover" />
             </Pressable>
             <View style={styles.info}>

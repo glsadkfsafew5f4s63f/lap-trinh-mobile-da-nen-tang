@@ -1,14 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import { useNavigation } from '@react-navigation/native';
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { colors, radius, shadow } from '../constants/theme';
-import { useFavorites } from '../context/FavoriteContext';
-import { useAuth } from '../context/AuthContext';
 import { formatPrice, Product } from '../data/products';
-import type { RootStackParamList } from '../screens/types';
 
 type Props = {
   product: Product;
@@ -18,11 +13,6 @@ type Props = {
 };
 
 export function ProductCard({ product, onPress, horizontal, featured }: Props) {
-  const { isFavorite, toggle } = useFavorites();
-  const { user } = useAuth();
-  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const liked = isFavorite(product.id);
-
   return (
     <Pressable
       style={[
@@ -55,22 +45,6 @@ export function ProductCard({ product, onPress, horizontal, featured }: Props) {
             </View>
           ) : null}
         </View>
-        <Pressable
-          style={styles.heart}
-          onPress={() => {
-            if (!user) {
-              Alert.alert('Cần đăng nhập', 'Bạn cần đăng nhập hoặc đăng ký để yêu thích sản phẩm.', [
-                { text: 'Để sau' },
-                { text: 'Đăng nhập', onPress: () => navigation.navigate('Login') },
-              ]);
-              return;
-            }
-            toggle(product.id);
-          }}
-          hitSlop={8}
-        >
-          <Ionicons name={liked ? 'heart' : 'heart-outline'} size={16} color={liked ? colors.accent : colors.ink} />
-        </Pressable>
       </View>
       <View style={styles.info}>
         <Text style={styles.brand}>{product.brand.toUpperCase()}</Text>
@@ -142,17 +116,6 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: '800',
     letterSpacing: 0.8,
-  },
-  heart: {
-    position: 'absolute',
-    right: 10,
-    top: 10,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.92)',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   info: {
     paddingHorizontal: 12,

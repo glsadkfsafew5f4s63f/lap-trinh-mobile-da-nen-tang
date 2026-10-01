@@ -33,7 +33,7 @@ export default function ProductReviewScreen({ navigation, route }: Props) {
       author: 'Bạn',
       stars,
       comment: comment.trim() || 'Sản phẩm đúng mô tả và giao hàng nhanh.',
-    }, order.id, detailId);
+    }, String(order.serverId), detailId);
     if (error) {
       Alert.alert('Không thể gửi đánh giá', error);
       return;

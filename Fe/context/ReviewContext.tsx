@@ -45,7 +45,7 @@ export function ReviewProvider({ children }: { children: ReactNode }) {
           }));
           setReviewsByUser((allUsers) => ({ ...allUsers, [userKey]: remoteReviews }));
         } catch {
-          // Keep local reviews as a fallback when the API is unavailable.
+          setReviewsByUser((allUsers) => ({ ...allUsers, [userKey]: [] }));
         }
       },
       async addReview(review: Omit<ProductReview, 'id' | 'date'>, orderId?: string, detailId?: number) {
@@ -67,16 +67,6 @@ export function ReviewProvider({ children }: { children: ReactNode }) {
             stars: review.stars,
             comment: review.comment,
           });
-          const nextReview = {
-            ...review,
-            author: user.name,
-            id: `review-${Date.now()}`,
-            date: new Date().toLocaleDateString('vi-VN'),
-          };
-          setReviewsByUser((allUsers) => ({
-            ...allUsers,
-            [userKey]: [nextReview, ...(allUsers[userKey] ?? [])],
-          }));
           return null;
         } catch (error) {
           return error instanceof Error ? error.message : 'Không thể gửi đánh giá.';

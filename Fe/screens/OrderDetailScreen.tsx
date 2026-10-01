@@ -1,27 +1,41 @@
 import { Image } from 'expo-image';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import { AppButton } from '../components/AppButton';
 import { AppInput } from '../components/AppInput';
 import { colors, radius } from '../constants/theme';
-import { useOrders } from '../context/OrderContext';
+import { mapApiOrder, useOrders } from '../context/OrderContext';
 import { useReviews } from '../context/ReviewContext';
-import { getOrderTotal } from '../data/orders';
+import { getOrderTotal, Order } from '../data/orders';
 import { formatPrice, getProductById } from '../data/products';
+import { getApiOrder, retryPaymentApi } from '../services/api';
 import type { RootStackParamList } from './types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'OrderDetail'>;
 
 export default function OrderDetailScreen({ navigation, route }: Props) {
-  const { getOrderById } = useOrders();
+  const { getOrderById, markReviewed, cancelOrder } = useOrders();
   const { addReview } = useReviews();
-  const order = getOrderById(route.params.orderId);
+  const [serverOrder, setServerOrder] = useState<Order | undefined>(() => getOrderById(route.params.orderId));
+  const [isUpdatingOrder, setIsUpdatingOrder] = useState(false);
   const [activeProductId, setActiveProductId] = useState<string | null>(null);
   const [stars, setStars] = useState(5);
   const [comment, setComment] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    const serverId = Number(route.params.orderId);
+    if (!serverId) return () => { active = false; };
+    void getApiOrder(serverId)
+      .then((row) => { if (active) setServerOrder(mapApiOrder(row)); })
+      .catch((error) => { if (active) Alert.alert('Không tải được đơn hàng', error instanceof Error ? error.message : 'Vui lòng thử lại.'); });
+    return () => { active = false; };
+  }, [route.params.orderId]);
+
+  const order = serverOrder ?? getOrderById(route.params.orderId);
 
   if (!order) {
     return (
@@ -38,8 +52,7 @@ export default function OrderDetailScreen({ navigation, route }: Props) {
         <Text style={styles.meta}>Ngày: {order.date}</Text>
         <Text style={styles.meta}>Trạng thái: {order.status}</Text>
         <Text style={styles.meta}>Thanh toán: {order.payment}</Text>
-        {order.deposit !== undefined ? <Text style={styles.meta}>Đã cọc 20%: {formatPrice(order.deposit)}</Text> : null}
-        {order.remaining !== undefined ? <Text style={styles.meta}>Còn lại: {formatPrice(order.remaining)}</Text> : null}
+        <Text style={styles.meta}>Trạng thái thanh toán: {order.paymentStatus || 'Chưa có dữ liệu'}</Text>
       </View>
 
       <Text style={styles.section}>Giao tới</Text>
@@ -62,7 +75,7 @@ export default function OrderDetailScreen({ navigation, route }: Props) {
                 contentFit="cover"
               />
               <View style={styles.info}>
-                <Text style={styles.bold}>{product?.name ?? item.productId}</Text>
+                <Text style={styles.bold}>{item.name || product?.name || item.productId}</Text>
                 <Text style={styles.meta}>
                   {item.sku ? `${item.sku} · ` : ''}x{item.quantity} · {formatPrice(item.price)}
                 </Text>
@@ -105,12 +118,13 @@ export default function OrderDetailScreen({ navigation, route }: Props) {
                           author: 'Bạn',
                           stars,
                           comment: comment.trim() || 'Sản phẩm đúng mô tả.',
-                        }, order.id, item.detailId);
+                        }, String(order.serverId), item.detailId);
                         setIsSubmitting(false);
                         if (error) {
                           Alert.alert('Không thể gửi đánh giá', error);
                           return;
                         }
+                        markReviewed(order.id, item.productId);
                         setActiveProductId(null);
                         setComment('');
                         Alert.alert('Đã gửi đánh giá', 'Cảm ơn bạn đã chia sẻ cảm nhận.');
@@ -126,10 +140,62 @@ export default function OrderDetailScreen({ navigation, route }: Props) {
 
       <View style={styles.card}>
         <View style={styles.totalRow}>
+          <Text style={styles.meta}>Tạm tính</Text>
+          <Text>{formatPrice(order.subtotal ?? getOrderTotal(order) - order.shippingFee)}</Text>
+        </View>
+        <View style={styles.totalRow}>
+          <Text style={styles.meta}>Giảm giá</Text>
+          <Text>-{formatPrice(order.discount || 0)}</Text>
+        </View>
+        <View style={styles.totalRow}>
+          <Text style={styles.meta}>Phí vận chuyển</Text>
+          <Text>{formatPrice(order.shippingFee)}</Text>
+        </View>
+        <View style={styles.totalRow}>
           <Text style={styles.bold}>Tổng tiền</Text>
           <Text style={styles.total}>{formatPrice(getOrderTotal(order))}</Text>
         </View>
       </View>
+      {['CHO_XAC_NHAN', 'DA_XAC_NHAN', 'DANG_CHUAN_BI'].includes(order.statusCode || '') ? (
+        <AppButton
+          label={isUpdatingOrder ? 'ĐANG HỦY...' : 'HỦY ĐƠN HÀNG'}
+          variant="outline"
+          disabled={isUpdatingOrder}
+          onPress={() => Alert.alert('Hủy đơn hàng', 'Bạn có chắc muốn hủy đơn này?', [
+            { text: 'Không', style: 'cancel' },
+            { text: 'Hủy đơn', style: 'destructive', onPress: async () => {
+              setIsUpdatingOrder(true);
+              const error = await cancelOrder(String(order.serverId));
+              setIsUpdatingOrder(false);
+              if (error) Alert.alert('Không thể hủy đơn', error);
+              else {
+                const detail = order.serverId ? await getApiOrder(order.serverId) : null;
+                if (detail) setServerOrder(mapApiOrder(detail));
+                Alert.alert('Đã hủy đơn hàng', 'Trạng thái đơn đã được cập nhật.');
+              }
+            } },
+          ])}
+        />
+      ) : null}
+      {order.paymentStatus === 'THAT_BAI' && order.serverId ? (
+        <AppButton
+          label={isUpdatingOrder ? 'ĐANG TẠO LƯỢT THANH TOÁN...' : 'THỬ THANH TOÁN LẠI'}
+          disabled={isUpdatingOrder}
+          onPress={async () => {
+            setIsUpdatingOrder(true);
+            try {
+              await retryPaymentApi(order.serverId!, order.payment === 'Chưa xác định' ? 'VNPAY' : order.payment);
+              const detail = await getApiOrder(order.serverId!);
+              setServerOrder(mapApiOrder(detail));
+              Alert.alert('Đã tạo lượt thanh toán', 'Đã ghi nhận lần thử mới. Cổng thanh toán cần được xử lý bởi nhà cung cấp.');
+            } catch (error) {
+              Alert.alert('Không thể thanh toán lại', error instanceof Error ? error.message : 'Vui lòng thử lại.');
+            } finally {
+              setIsUpdatingOrder(false);
+            }
+          }}
+        />
+      ) : null}
     </ScrollView>
   );
 }

@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Image } from 'expo-image';
 import { useEffect, useState } from 'react';
-import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { AppButton } from '../components/AppButton';
 import { AppInput } from '../components/AppInput';
@@ -10,9 +10,8 @@ import { colors, radius } from '../constants/theme';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { useOrders } from '../context/OrderContext';
-import { defaultAddress } from '../data/address';
 import { formatPrice } from '../data/products';
-import { getApiAddresses } from '../services/api';
+import { ApiCheckoutQuote, createAddressApi, getApiAddresses, getApiCheckoutQuote, updateAddressApi } from '../services/api';
 import type { RootStackParamList } from './types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Checkout'>;
@@ -21,31 +20,92 @@ export default function CheckoutScreen({ navigation }: Props) {
   const { items, total, clear, isLoading } = useCart();
   const { user } = useAuth();
   const { addOrder, isLoading: isOrderLoading, error } = useOrders();
-  const [name, setName] = useState(user?.name || defaultAddress.name);
-  const [phone, setPhone] = useState(user?.phone || defaultAddress.phone);
-  const [address, setAddress] = useState(user?.address || defaultAddress.address);
+  const [name, setName] = useState(user?.name || '');
+  const [phone, setPhone] = useState(user?.phone || '');
+  const [address, setAddress] = useState(user?.address || '');
+  const [ward, setWard] = useState('');
+  const [district, setDistrict] = useState('');
+  const [province, setProvince] = useState('');
   const [addressId, setAddressId] = useState<number | undefined>();
-  const [paymentVisible, setPaymentVisible] = useState(false);
-  const [pendingOrderId, setPendingOrderId] = useState<string | null>(null);
-  const shippingFee = 30000;
-  const grandTotal = total + shippingFee;
-  const deposit = Math.round(grandTotal * 0.2);
-  const remaining = grandTotal - deposit;
+  const [addresses, setAddresses] = useState<Awaited<ReturnType<typeof getApiAddresses>>>([]);
+  const [voucherCode, setVoucherCode] = useState('');
+  const [appliedVoucherCode, setAppliedVoucherCode] = useState('');
+  const [checkoutQuote, setCheckoutQuote] = useState<ApiCheckoutQuote | null>(null);
+  const [voucherError, setVoucherError] = useState('');
+  const paymentMethod = 'COD';
+  const [isCheckingVoucher, setIsCheckingVoucher] = useState(false);
+  const [isLoadingQuote, setIsLoadingQuote] = useState(false);
+  const shippingFee = checkoutQuote?.PhiGiaoHang ?? null;
+  const voucherDiscount = checkoutQuote?.GiamGia ?? 0;
+  const grandTotal = checkoutQuote?.ThanhTien ?? 0;
 
   useEffect(() => {
-    getApiAddresses().then((addresses) => {
-      const current = addresses[0];
-      if (!current) return;
-      setAddressId(current.MaDiaChi);
-      setName(current.TenNguoiNhan);
-      setPhone(current.SoDienThoai);
-      setAddress(current.DiaChiChiTiet);
-    }).catch(() => undefined);
-  }, []);
+    let active = true;
+    const loadAddresses = () => {
+      void getApiAddresses().then((rows) => {
+        if (!active) return;
+        setAddresses(rows);
+        const current = rows.find((item) => item.MaDiaChi === addressId) || rows[0];
+        if (current) {
+          setAddressId(current.MaDiaChi);
+          setName(current.TenNguoiNhan);
+          setPhone(current.SoDienThoai);
+          setAddress(current.DiaChiChiTiet);
+          setWard(current.PhuongXa || '');
+          setDistrict(current.QuanHuyen || '');
+          setProvince(current.TinhThanh || '');
+        }
+      }).catch(() => undefined);
+    };
+    loadAddresses();
+    const unsubscribe = navigation.addListener('focus', loadAddresses);
+    return () => { active = false; unsubscribe(); };
+  }, [navigation, addressId]);
+
+  useEffect(() => {
+    let active = true;
+    setIsLoadingQuote(true);
+    getApiCheckoutQuote(appliedVoucherCode || undefined)
+      .then((quote) => { if (active) setCheckoutQuote(quote); })
+      .catch((error) => {
+        if (!active) return;
+        setCheckoutQuote(null);
+        if (appliedVoucherCode) setVoucherError(error instanceof Error ? error.message : 'Mã giảm giá không hợp lệ.');
+      })
+      .finally(() => { if (active) setIsLoadingQuote(false); });
+    return () => { active = false; };
+  }, [total, appliedVoucherCode]);
+  async function checkVoucher() {
+    if (!voucherCode.trim()) {
+      setVoucherError('Nhập mã giảm giá trước khi kiểm tra.');
+      return;
+    }
+    setIsCheckingVoucher(true);
+    setVoucherError('');
+    try {
+      const result = await getApiCheckoutQuote(voucherCode.trim());
+      setCheckoutQuote(result);
+      setAppliedVoucherCode(voucherCode.trim());
+    } catch (error) {
+      setAppliedVoucherCode('');
+      setVoucherError(error instanceof Error ? error.message : 'Mã giảm giá không hợp lệ.');
+      try {
+        setCheckoutQuote(await getApiCheckoutQuote());
+      } catch {
+        setCheckoutQuote(null);
+      }
+    } finally {
+      setIsCheckingVoucher(false);
+    }
+  }
 
   async function placeOrder() {
     if (items.length === 0) {
       Alert.alert('Giỏ hàng trống', 'Hãy thêm sản phẩm trước khi đặt hàng.');
+      return;
+    }
+    if (shippingFee === null || isLoadingQuote) {
+      Alert.alert('Chưa sẵn sàng', 'Chưa lấy được tổng tiền chính thức từ máy chủ.');
       return;
     }
     if (!name.trim() || !phone.trim() || !address.trim()) {
@@ -54,11 +114,26 @@ export default function CheckoutScreen({ navigation }: Props) {
     }
 
     try {
+      const addressPayload = {
+        TenNguoiNhan: name.trim(),
+        SoDienThoai: phone.trim(),
+        DiaChiChiTiet: address.trim(),
+        PhuongXa: ward.trim(),
+        QuanHuyen: district.trim(),
+        TinhThanh: province.trim(),
+        LaMacDinh: 1,
+      };
+      const savedAddressId = addressId
+        ? (await updateAddressApi(addressId, addressPayload), addressId)
+        : (await createAddressApi(addressPayload)).insertId;
+      setAddressId(savedAddressId);
       const order = await addOrder({
         name: name.trim(),
-        addressId,
+        addressId: savedAddressId,
         phone: phone.trim(),
         address: address.trim(),
+        paymentMethod,
+        voucherCode: appliedVoucherCode || undefined,
         items: items.map((item) => ({
           productId: item.id,
           variantId: item.variantId,
@@ -71,12 +146,12 @@ export default function CheckoutScreen({ navigation }: Props) {
           quantity: item.quantity,
           price: item.price,
         })),
-        deposit,
-        remaining,
       });
 
-      setPendingOrderId(order.id);
-      setPaymentVisible(true);
+      await clear();
+      Alert.alert('Đặt hàng thành công', `Đơn ${order.id} đã được lưu.`, [
+        { text: 'Xem đơn hàng', onPress: () => navigation.navigate('MainTabs', { screen: 'Profile' }) },
+      ]);
     } catch (error) {
       Alert.alert('Không thể đặt hàng', error instanceof Error ? error.message : 'Đơn hàng chưa được lưu.');
     }
@@ -86,6 +161,27 @@ export default function CheckoutScreen({ navigation }: Props) {
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.section}>Địa chỉ nhận hàng</Text>
       <View style={styles.card}>
+        {addresses.map((item) => (
+          <Pressable
+            key={item.MaDiaChi}
+            style={[styles.savedAddress, item.MaDiaChi === addressId && styles.savedAddressSelected]}
+            onPress={() => {
+              setAddressId(item.MaDiaChi);
+              setName(item.TenNguoiNhan);
+              setPhone(item.SoDienThoai);
+              setAddress(item.DiaChiChiTiet);
+              setWard(item.PhuongXa || '');
+              setDistrict(item.QuanHuyen || '');
+              setProvince(item.TinhThanh || '');
+            }}
+          >
+            <Text style={styles.savedAddressName}>{item.TenNguoiNhan}{item.LaMacDinh ? ' · Mặc định' : ''}</Text>
+            <Text style={styles.savedAddressText}>{item.SoDienThoai} · {[item.DiaChiChiTiet, item.PhuongXa, item.QuanHuyen, item.TinhThanh].filter(Boolean).join(', ')}</Text>
+          </Pressable>
+        ))}
+        <Pressable onPress={() => navigation.navigate('Address')}>
+          <Text style={styles.manageAddresses}>Quản lý địa chỉ</Text>
+        </Pressable>
         <AppInput value={name} onChangeText={setName} placeholder="Họ tên" label="Người nhận" />
         <AppInput
           value={phone}
@@ -102,6 +198,9 @@ export default function CheckoutScreen({ navigation }: Props) {
           label="Địa chỉ"
           style={styles.address}
         />
+        <AppInput value={ward} onChangeText={setWard} placeholder="Phường / xã" label="Phường / xã" />
+        <AppInput value={district} onChangeText={setDistrict} placeholder="Quận / huyện" label="Quận / huyện" />
+        <AppInput value={province} onChangeText={setProvince} placeholder="Tỉnh / thành phố" label="Tỉnh / thành phố" />
       </View>
 
       <Text style={styles.section}>Sản phẩm</Text>
@@ -125,76 +224,48 @@ export default function CheckoutScreen({ navigation }: Props) {
       <View style={styles.card}>
         <View style={styles.totalRow}>
           <Text style={styles.muted}>Tạm tính</Text>
-          <Text>{formatPrice(total)}</Text>
+          <Text>{formatPrice(checkoutQuote?.TongTien ?? 0)}</Text>
+        </View>
+        <View style={styles.totalRow}>
+          <Text style={styles.muted}>Giảm giá</Text>
+          <Text>-{formatPrice(voucherDiscount)}</Text>
         </View>
         <View style={styles.totalRow}>
           <Text style={styles.muted}>Phí vận chuyển</Text>
-          <Text>{formatPrice(shippingFee)}</Text>
+          <Text>{formatPrice(shippingFee ?? 0)}</Text>
         </View>
         <View style={styles.totalRow}>
           <Text style={styles.bold}>Tổng cộng</Text>
           <Text style={styles.grandTotal}>{formatPrice(grandTotal)}</Text>
         </View>
-        <View style={styles.totalRow}>
-          <Text style={styles.depositLabel}>Cọc trước 20%</Text>
-          <Text style={styles.depositValue}>{formatPrice(deposit)}</Text>
+      </View>
+
+      <Text style={styles.section}>Mã giảm giá</Text>
+      <View style={styles.card}>
+        <View style={styles.voucherRow}>
+          <AppInput value={voucherCode} onChangeText={(value) => { setVoucherCode(value); setVoucherError(''); if (value.trim() !== appliedVoucherCode) setAppliedVoucherCode(''); }} placeholder="Nhập mã giảm giá" />
+          <AppButton label={isCheckingVoucher ? 'ĐANG KIỂM TRA' : 'ÁP DỤNG'} variant="outline" disabled={isCheckingVoucher} onPress={checkVoucher} />
         </View>
-        <View style={styles.totalRow}>
-          <Text style={styles.muted}>Thanh toán khi nhận hàng</Text>
-          <Text>{formatPrice(remaining)}</Text>
-        </View>
+        {voucherError ? <Text style={styles.errorText}>{voucherError}</Text> : null}
+        {appliedVoucherCode && voucherDiscount > 0 ? <Text style={styles.hint}>Đã giảm {formatPrice(voucherDiscount)} với mã {appliedVoucherCode}.</Text> : null}
       </View>
 
       <Text style={styles.section}>Phương thức thanh toán</Text>
-      <View style={[styles.card, styles.payment]}>
-        <Ionicons name="radio-button-on" size={20} color={colors.accent} />
-        <View>
-          <Text style={styles.bold}>Cọc 20% qua QR + thanh toán phần còn lại khi nhận hàng</Text>
-          <Text style={styles.hint}>Cọc ngay {formatPrice(deposit)}, nhận hàng thanh toán {formatPrice(remaining)}</Text>
+      <View style={styles.card}>
+        <View style={styles.paymentOption}>
+          <Ionicons name="radio-button-on" size={20} color={colors.accent} />
+          <Text style={styles.bold}>Thanh toán khi nhận hàng (COD)</Text>
         </View>
+        <Text style={styles.hint}>Tổng thanh toán {formatPrice(grandTotal)}.</Text>
+        <Text style={styles.hint}>Thanh toán trực tuyến chưa khả dụng vì máy chủ chưa tích hợp cổng thanh toán.</Text>
       </View>
 
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
       <AppButton
-        label={isOrderLoading || isLoading ? 'ĐANG XỬ LÝ...' : 'TẠO ĐƠN VÀ THANH TOÁN CỌC'}
+        label={isOrderLoading || isLoading ? 'ĐANG XỬ LÝ...' : 'ĐẶT HÀNG'}
         onPress={placeOrder}
-        disabled={isOrderLoading || isLoading}
+        disabled={isOrderLoading || isLoading || isLoadingQuote || shippingFee === null}
       />
-
-      <Modal visible={paymentVisible} animationType="slide" transparent onRequestClose={() => setPaymentVisible(false)}>
-        <View style={styles.modalBackdrop}>
-          <View style={styles.paymentModal}>
-            <Text style={styles.modalTitle}>Thanh toán tiền cọc</Text>
-            <Text style={styles.modalHint}>Quét mã QR bằng ứng dụng ngân hàng của bạn</Text>
-            <Image
-              source={{
-                uri: `https://img.vietqr.io/image/MB-0868087112-compact2.png?amount=${deposit}&addInfo=${encodeURIComponent(`COC ${pendingOrderId ?? ''}`)}&accountName=NGUYEN%20VAN%20AN`,
-              }}
-              style={styles.qr}
-              contentFit="contain"
-            />
-            <View style={styles.transferDetails}>
-              <Text style={styles.transferLine}>Ngân hàng: <Text style={styles.bold}>MB Bank</Text></Text>
-              <Text style={styles.transferLine}>Số tài khoản: <Text style={styles.bold}>0868087112</Text></Text>
-              <Text style={styles.transferLine}>Chủ tài khoản: <Text style={styles.bold}>NGUYEN VAN AN</Text></Text>
-              <Text style={styles.transferLine}>Số tiền cọc: <Text style={styles.depositValue}>{formatPrice(deposit)}</Text></Text>
-              <Text style={styles.transferLine}>Nội dung: <Text style={styles.bold}>COC {pendingOrderId}</Text></Text>
-            </View>
-            <Text style={styles.verificationHint}>Đơn hàng sẽ được giao sau khi cửa hàng kiểm tra giao dịch.</Text>
-            <AppButton
-              label="TÔI ĐÃ CHUYỂN KHOẢN"
-              onPress={() => {
-                setPaymentVisible(false);
-                clear();
-                navigation.navigate('MainTabs', { screen: 'Profile' });
-              }}
-            />
-            <Pressable onPress={() => setPaymentVisible(false)} style={styles.cancelPayment}>
-              <Text style={styles.cancelPaymentText}>Để tôi thanh toán sau</Text>
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
     </ScrollView>
   );
 }
@@ -226,6 +297,11 @@ const styles = StyleSheet.create({
     minHeight: 72,
     textAlignVertical: 'top',
   },
+  savedAddress: { padding: 10, borderWidth: 1, borderColor: colors.line, borderRadius: radius.md, gap: 4 },
+  savedAddressSelected: { borderColor: colors.accent },
+  savedAddressName: { color: colors.ink, fontWeight: '700' },
+  savedAddressText: { color: colors.muted, fontSize: 12 },
+  manageAddresses: { color: colors.accent, fontWeight: '700' },
   productRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -278,6 +354,16 @@ const styles = StyleSheet.create({
     color: colors.accent,
   },
   payment: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  voucherRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  paymentOption: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,

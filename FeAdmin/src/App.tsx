@@ -49,35 +49,129 @@ const sections: Array<{ label: string; items: Nav[] }> = [
   { label: 'LIÊN HỆ', items: [{ icon: '◉', label: 'Liên hệ', key: 'contacts' }] },
   { label: 'HỆ THỐNG', items: [{ icon: '♙', label: 'Tài khoản quản trị', key: 'admin-users' }, { icon: '♜', label: 'Phân quyền', key: 'roles' }] },
 ]
+const roleByMenuKey: Record<string, string> = {
+  overview: 'NHAN_VIEN_BAO_CAO', 'admin-users': 'ADMIN', roles: 'ADMIN',
+  products: 'NHAN_VIEN_SAN_PHAM', variants: 'NHAN_VIEN_SAN_PHAM', categories: 'NHAN_VIEN_SAN_PHAM', brands: 'NHAN_VIEN_SAN_PHAM', colors: 'NHAN_VIEN_SAN_PHAM', sizes: 'NHAN_VIEN_SAN_PHAM', images: 'NHAN_VIEN_SAN_PHAM',
+  orders: 'NHAN_VIEN_DON_HANG', history: 'NHAN_VIEN_DON_HANG',
+  payments: 'NHAN_VIEN_TAI_CHINH', invoices: 'NHAN_VIEN_TAI_CHINH',
+  users: 'NHAN_VIEN_KHACH_HANG', reviews: 'NHAN_VIEN_KHACH_HANG',
+  vouchers: 'NHAN_VIEN_KHUYEN_MAI', discounts: 'NHAN_VIEN_KHUYEN_MAI', 'flash-sale': 'NHAN_VIEN_KHUYEN_MAI',
+  inventory: 'NHAN_VIEN_KHO', suppliers: 'NHAN_VIEN_KHO', 'purchase-orders': 'NHAN_VIEN_KHO', 'stock-history': 'NHAN_VIEN_KHO',
+  contacts: 'NHAN_VIEN_LIEN_HE',
+}
+const employeeRoles = Object.values(roleByMenuKey).filter((role) => role.startsWith('NHAN_VIEN_'))
+const adminMenuKeys = new Set(['admin-users', 'roles'])
 const money = (value: number) => `${(Number(value) / 1000000).toLocaleString('vi-VN', { maximumFractionDigits: 1 })}M`
 const statusLabel: Record<string, string> = { CHO_XAC_NHAN: 'Chờ xác nhận', DA_XAC_NHAN: 'Đã xác nhận', DANG_CHUAN_BI: 'Đang chuẩn bị', DANG_GIAO: 'Đang giao', DA_GIAO: 'Đã giao', DA_HUY: 'Đã hủy', DA_HOAN_TIEN: 'Đã hoàn tiền' }
 
-function AdminApp({ onLogout }: { onLogout: () => void }) {
-  const [active, setActive] = useState('overview')
+function AdminApp({ onLogout, roles }: { onLogout: () => void; roles: string[] }) {
+  const isAdmin = roles.includes('ADMIN')
+  const visibleSections = sections.map((section) => ({ ...section, items: section.items.filter((item) => isAdmin ? adminMenuKeys.has(item.key) : roles.includes(roleByMenuKey[item.key])) })).filter((section) => section.items.length)
+  const firstMenuKey = visibleSections.flatMap((section) => section.items)[0]?.key || ''
+  const [active, setActive] = useState(firstMenuKey)
   const [range, setRange] = useState('30 ngày qua')
   const [data, setData] = useState(emptyData)
   const [loading, setLoading] = useState(false)
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => Object.fromEntries(sections.map((section) => [section.label, section.label === 'TỔNG QUAN' || section.label === 'SẢN PHẨM'])))
-  useEffect(() => { const load = async () => { setLoading(true); try { const token = localStorage.getItem('admin_token'); const response = await fetch(`${API}/api/admin/dashboard`, { headers: token ? { Authorization: `Bearer ${token}` } : undefined }); if (response.ok) { const body = await response.json(); setData(normalizeDashboardData(body.data)) } } finally { setLoading(false) } }; void load() }, [])
+  useEffect(() => { if (!isAdmin) return; const load = async () => { setLoading(true); try { const token = localStorage.getItem('admin_token'); const response = await fetch(`${API}/api/admin/dashboard`, { headers: token ? { Authorization: `Bearer ${token}` } : undefined }); if (response.ok) { const body = await response.json(); setData(normalizeDashboardData(body.data)) } } finally { setLoading(false) } }; void load() }, [isAdmin])
   const title = sections.flatMap((section) => section.items).find((item) => item.key === active)?.label || 'Tổng quan'
   const productModes = ['products', 'variants', 'categories', 'brands', 'colors', 'sizes', 'images']
   const toggleGroup = (label: string) => setOpenGroups((current) => ({ ...current, [label]: !current[label] }))
-  const content = productModes.includes(active) ? <ProductManagement mode={active} /> : ['orders', 'history'].includes(active) ? <OrderManagement mode={active} /> : ['payments', 'invoices'].includes(active) ? <FinancialManagement mode={active as 'payments' | 'invoices'} /> : ['users', 'reviews'].includes(active) ? <CustomerManagement mode={active} /> : ['vouchers', 'discounts', 'flash-sale'].includes(active) ? <PromotionManagement mode={active} /> : ['inventory', 'suppliers', 'purchase-orders', 'stock-history'].includes(active) ? <WarehouseManagement mode={active} /> : active === 'contacts' ? <ContactManagement /> : ['admin-users', 'roles'].includes(active) ? <SystemManagement mode={active} /> : <Dashboard data={data} range={range} setRange={setRange} setActive={setActive} />
-  return <div className="admin-shell"><aside className="sidebar"><div className="brand"><b>✦</b><span><strong>FashionStore</strong><small>Quản trị thời trang</small></span></div><nav>{sections.map((section) => <div className={openGroups[section.label] ? 'nav-group' : 'nav-group collapsed'} key={section.label}><button className="nav-label" aria-expanded={openGroups[section.label]} onClick={() => toggleGroup(section.label)}>{section.label}<span>⌄</span></button><div className={openGroups[section.label] ? 'nav-items' : 'nav-items collapsed'}>{section.items.map((item) => <button className={active === item.key ? 'nav-item active' : 'nav-item'} key={item.key} onClick={() => setActive(item.key)}><i>{item.icon}</i>{item.label}</button>)}</div></div>)}</nav><button className="logout" onClick={onLogout}>↪ &nbsp;Đăng xuất</button></aside><main className="main-area"><header className="topbar"><div className="breadcrumbs">Trang chủ <span>›</span> <b>{title}</b></div><div className="top-actions"><label className="search">⌕ <input placeholder="Tìm kiếm nhanh..." /><kbd>Ctrl + K</kbd></label><button className="notify">♧<i>3</i></button><span className="divider" /><div className="profile"><b>TM</b><span><strong>Quản trị viên</strong><small>Đã xác thực từ BE</small></span>⌄</div></div></header>{content}<footer>{loading ? 'Đang đồng bộ dữ liệu...' : 'Dữ liệu được đồng bộ từ hệ thống FashionStore'} <span>•</span> Cập nhật lúc {new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</footer></main></div>
+  const content = !active ? <NoAccess /> : productModes.includes(active) ? <ProductManagement mode={active} /> : ['orders', 'history'].includes(active) ? <OrderManagement mode={active} /> : ['payments', 'invoices'].includes(active) ? <FinancialManagement mode={active as 'payments' | 'invoices'} /> : ['users', 'reviews'].includes(active) ? <CustomerManagement mode={active} /> : ['vouchers', 'discounts', 'flash-sale'].includes(active) ? <PromotionManagement mode={active} /> : ['inventory', 'suppliers', 'purchase-orders', 'stock-history'].includes(active) ? <WarehouseManagement mode={active} /> : active === 'contacts' ? <ContactManagement /> : ['admin-users', 'roles'].includes(active) ? <SystemManagement mode={active} /> : <Dashboard data={data} range={range} setRange={setRange} setActive={setActive} />
+  return (
+    <div className="admin-shell">
+      <aside className="sidebar">
+        <div className="brand">
+          <b>✦</b>
+          <span>
+            <strong>FashionStore</strong>
+            <small>Quản trị thời trang</small>
+          </span>
+        </div>
+        <nav>
+          {visibleSections.map((section) => (
+            <div
+              className={openGroups[section.label] ? "nav-group" : "nav-group collapsed"}
+              key={section.label}
+            >
+              <button
+                className="nav-label"
+                aria-expanded={openGroups[section.label]}
+                onClick={() => toggleGroup(section.label)}
+              >
+                {section.label}
+                <span>⌄</span>
+              </button>
+              <div
+                className={openGroups[section.label] ? "nav-items" : "nav-items collapsed"}
+              >
+                {section.items.map((item) => (
+                  <button
+                    className={active === item.key ? "nav-item active" : "nav-item"}
+                    key={item.key}
+                    onClick={() => setActive(item.key)}
+                  >
+                    <i>{item.icon}</i>
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </nav>
+        <button className="logout" onClick={onLogout}>
+          ↪ &nbsp;Đăng xuất
+        </button>
+      </aside>
+      <main className="main-area">
+        <header className="topbar">
+          <div className="breadcrumbs">
+            Trang chủ <span>›</span> <b>{title}</b>
+          </div>
+          <div className="top-actions">
+            <div className="profile">
+              <b>TM</b>
+              <span>
+                <strong>{isAdmin ? 'Quản trị viên' : 'Nhân viên'}</strong>
+                <small>{roles.filter((role) => role !== 'ADMIN').join(', ') || 'Quản lý tài khoản'}</small>
+              </span>
+              ⌄
+            </div>
+          </div>
+        </header>
+        {content}
+        <footer>
+          {loading
+            ? "Đang đồng bộ dữ liệu..."
+            : "Dữ liệu được đồng bộ từ hệ thống FashionStore"}
+          <span>•</span> Cập nhật lúc{" "}
+          {new Date().toLocaleTimeString("vi-VN", {
+            hour: "2-digit",
+            minute: "2-digit",
+          })}
+        </footer>
+      </main>
+    </div>
+  )
+}
+
+function NoAccess() {
+  return <section className="page-heading"><div><small>HỆ THỐNG / PHÂN QUYỀN</small><h1>Chưa được gán lĩnh vực</h1><p>Tài khoản nhân viên chưa có vai trò nghiệp vụ. Vui lòng liên hệ ADMIN để được phân công.</p></div></section>
 }
 
 function App() {
   const [authenticated, setAuthenticated] = useState(Boolean(localStorage.getItem('admin_token')))
+  const [roles, setRoles] = useState<string[]>([])
   const [checking, setChecking] = useState(true)
-  useEffect(() => { const token = localStorage.getItem('admin_token'); if (!token) { setChecking(false); return } fetch(`${API}/api/auth/me`, { headers: { Authorization: `Bearer ${token}` } }).then(async (response) => { const body = response.ok ? await response.json() : null; const roles = body?.data?.roles || []; if (!response.ok || (!roles.includes('ADMIN') && !roles.includes('NHAN_VIEN'))) { localStorage.removeItem('admin_token'); setAuthenticated(false) } }).catch(() => { localStorage.removeItem('admin_token'); setAuthenticated(false) }).finally(() => setChecking(false)) }, [])
+  useEffect(() => { const token = localStorage.getItem('admin_token'); if (!token) { setChecking(false); return } fetch(`${API}/api/auth/me`, { headers: { Authorization: `Bearer ${token}` } }).then(async (response) => { const body = response.ok ? await response.json() : null; const currentRoles: string[] = body?.data?.roles || []; if (!response.ok || (!currentRoles.includes('ADMIN') && !currentRoles.includes('NHAN_VIEN') && !employeeRoles.some((role) => currentRoles.includes(role)))) { localStorage.removeItem('admin_token'); setAuthenticated(false) } else { setRoles(currentRoles) } }).catch(() => { localStorage.removeItem('admin_token'); setAuthenticated(false) }).finally(() => setChecking(false)) }, [])
   if (checking) return <div className="auth-loading">Đang xác thực tài khoản quản trị...</div>
-  return authenticated ? <AdminApp onLogout={() => { localStorage.removeItem('admin_token'); setAuthenticated(false) }} /> : <AdminLogin onSuccess={() => setAuthenticated(true)} />
+  return authenticated ? <AdminApp roles={roles} onLogout={() => { localStorage.removeItem('admin_token'); setRoles([]); setAuthenticated(false) }} /> : <AdminLogin onSuccess={(userRoles) => { setRoles(userRoles); setAuthenticated(true) }} />
 }
 
-function AdminLogin({ onSuccess }: { onSuccess: () => void }) {
+function AdminLogin({ onSuccess }: { onSuccess: (roles: string[]) => void }) {
   const [error, setError] = useState(''); const [submitting, setSubmitting] = useState(false)
-  const submit = async (event: React.FormEvent<HTMLFormElement>) => { event.preventDefault(); setSubmitting(true); setError(''); const values = Object.fromEntries(new FormData(event.currentTarget).entries()); try { const response = await fetch(`${API}/api/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: values.username, password: values.password }) }); const body = await response.json(); if (!response.ok) throw new Error(body.message || 'Đăng nhập thất bại.'); const roles = body.data?.roles || []; if (!roles.includes('ADMIN') && !roles.includes('NHAN_VIEN')) throw new Error('Tài khoản không có quyền quản trị.'); localStorage.setItem('admin_token', body.token); onSuccess() } catch (cause) { setError(cause instanceof Error ? cause.message : 'Không thể kết nối máy chủ.') } finally { setSubmitting(false) } }
-  return <main className="auth-page"><form className="auth-card" onSubmit={submit}><div className="auth-brand">✦ <strong>FashionStore</strong></div><small>ADMIN CONSOLE</small><h1>Đăng nhập quản trị</h1><p>Sử dụng tài khoản có vai trò ADMIN hoặc NHAN_VIEN.</p><label>Tên đăng nhập<input name="username" required autoComplete="username" /></label><label>Mật khẩu<input name="password" type="password" required autoComplete="current-password" /></label>{error && <div className="auth-error">{error}</div>}<button className="primary-action" disabled={submitting}>{submitting ? 'Đang xác thực...' : 'Đăng nhập'}</button></form></main>
+  const submit = async (event: React.FormEvent<HTMLFormElement>) => { event.preventDefault(); setSubmitting(true); setError(''); const values = Object.fromEntries(new FormData(event.currentTarget).entries()); try { const response = await fetch(`${API}/api/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: values.username, password: values.password }) }); const body = await response.json(); if (!response.ok) throw new Error(body.message || 'Đăng nhập thất bại.'); const userRoles: string[] = body.data?.roles || []; if (!userRoles.includes('ADMIN') && !userRoles.includes('NHAN_VIEN') && !employeeRoles.some((role) => userRoles.includes(role))) throw new Error('Tài khoản chưa được gán quyền quản trị hoặc lĩnh vực nghiệp vụ.'); localStorage.setItem('admin_token', body.token); onSuccess(userRoles) } catch (cause) { setError(cause instanceof Error ? cause.message : 'Không thể kết nối máy chủ.') } finally { setSubmitting(false) } }
+  return <main className="auth-page"><form className="auth-card" onSubmit={submit}><div className="auth-brand">✦ <strong>FashionStore</strong></div><small>ADMIN CONSOLE</small><h1>Đăng nhập quản trị</h1><p>Đăng nhập bằng tài khoản được ADMIN cấp quyền.</p><label>Tên đăng nhập<input name="username" required autoComplete="username" /></label><label>Mật khẩu<input name="password" type="password" required autoComplete="current-password" /></label>{error && <div className="auth-error">{error}</div>}<button className="primary-action" disabled={submitting}>{submitting ? 'Đang xác thực...' : 'Đăng nhập'}</button></form></main>
 }
 
 function Dashboard({ data, range, setRange, setActive }: { data: DashboardData; range: string; setRange: (value: string) => void; setActive: (value: string) => void }) {

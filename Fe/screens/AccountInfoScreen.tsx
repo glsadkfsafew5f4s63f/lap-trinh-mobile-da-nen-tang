@@ -15,13 +15,14 @@ export default function AccountInfoScreen({ navigation }: Props) {
   const [name, setName] = useState(user?.name ?? '');
   const [phone, setPhone] = useState(user?.phone ?? '');
 
-  function save() {
+  async function save() {
     if (!name.trim()) {
       Alert.alert('Thiếu thông tin', 'Họ tên không được trống.');
       return;
     }
-    updateUser({ name: name.trim() });
-    Alert.alert('Đã lưu', 'Thông tin tài khoản đã cập nhật (local).', [
+    const error = await updateUser({ name: name.trim() });
+    if (error) { Alert.alert('Không thể cập nhật', error); return; }
+    Alert.alert('Đã lưu', 'Thông tin tài khoản đã được cập nhật trên hệ thống.', [
       { text: 'OK', onPress: () => navigation.goBack() },
     ]);
   }

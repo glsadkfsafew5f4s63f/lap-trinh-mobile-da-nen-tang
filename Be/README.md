@@ -214,3 +214,19 @@ npm start
 - Backend được sinh dựa trên cấu trúc thực tế của MySQL.
 - Foreign Key được phân tích trong `utils/relationships.js`.
 - Nghiệp vụ đặt hàng dùng transaction để tạo đơn, trừ tồn kho và làm sạch giỏ hàng.
+
+## Phân quyền nhân viên
+
+Sau khi triển khai schema hiện có, chạy migration `migrations/20260930_staff_domain_roles.sql` một lần. Migration có thể chạy lại an toàn.
+
+- `ADMIN`: quản lý tài khoản nhân viên và phân công vai trò.
+- `NHAN_VIEN_BAO_CAO`: xem tổng quan và báo cáo, chỉ đọc.
+- `NHAN_VIEN_SAN_PHAM`: sản phẩm, biến thể và danh mục.
+- `NHAN_VIEN_DON_HANG`: đơn hàng và trạng thái giao hàng.
+- `NHAN_VIEN_TAI_CHINH`: thanh toán và hóa đơn.
+- `NHAN_VIEN_KHACH_HANG`: hồ sơ khách hàng và đánh giá.
+- `NHAN_VIEN_KHUYEN_MAI`: voucher và chương trình giảm giá.
+- `NHAN_VIEN_KHO`: tồn kho, nhà cung cấp và phiếu nhập.
+- `NHAN_VIEN_LIEN_HE`: liên hệ khách hàng.
+
+Một nhân viên có thể được gán nhiều vai trò. `NHAN_VIEN` cũ được giữ lại để không mất liên kết dữ liệu nhưng không cấp quyền vào các module; ADMIN cần gán lại lĩnh vực phù hợp trong mục Tài khoản quản trị. Nhân viên cần đăng nhập lại sau khi được đổi vai trò để nhận JWT có quyền mới.

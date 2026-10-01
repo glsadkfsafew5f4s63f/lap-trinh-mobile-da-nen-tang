@@ -1,9 +1,7 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from 'react';
 
-import { getOrderTotal, mockOrders, Order, OrderItem } from '../data/orders';
-import { mockUser } from '../data/user';
-import { createOrderApi, getApiOrders, OrderApiRecord } from '../services/api';
+import { getOrderTotal, Order, OrderItem } from '../data/orders';
+import { cancelOrderApi, createOrderApi, getApiOrders, OrderApiRecord } from '../services/api';
 import { useAuth } from './AuthContext';
 
 type NewOrderInput = {
@@ -12,63 +10,68 @@ type NewOrderInput = {
   phone: string;
   address: string;
   items: OrderItem[];
-  deposit: number;
-  remaining: number;
+  paymentMethod: string;
+  voucherCode?: string;
 };
 
 type OrderContextValue = {
   orders: Order[];
   getOrderById: (id: string) => Order | undefined;
   addOrder: (input: NewOrderInput) => Promise<Order>;
+  cancelOrder: (id: string) => Promise<string | null>;
+  refreshOrders: () => Promise<void>;
   markReviewed: (orderId: string, productId: string) => void;
   isLoading: boolean;
   error: string | null;
 };
 
-const ORDER_STORAGE_KEY = '@anhuyqa:orders';
 const OrderContext = createContext<OrderContextValue | null>(null);
 
-function mapApiOrder(row: OrderApiRecord, index: number): Order {
+export function mapApiOrder(row: OrderApiRecord): Order {
   return {
-    id: row.MaDonHang ? `DH${String(row.MaDonHang).padStart(3, '0')}` : `DH${String(index + 1).padStart(3, '0')}`,
+    id: row.MaDonHangCode,
+    serverId: row.MaDonHang,
     date: row.NgayDat ? new Date(row.NgayDat).toLocaleDateString('vi-VN') : new Date().toLocaleDateString('vi-VN'),
     status: row.TrangThaiDonHang === 'DA_XAC_NHAN'
       ? 'Đã xác nhận'
-      : row.TrangThaiDonHang === 'DANG_GIAO'
+      : row.TrangThaiDonHang === 'DANG_CHUAN_BI' || row.TrangThaiDonHang === 'DANG_GIAO'
         ? 'Đang giao'
         : row.TrangThaiDonHang === 'DA_GIAO'
           ? 'Đã giao'
           : row.TrangThaiDonHang === 'DA_HUY'
-            ? 'Đã hủy'
+                ? 'Đã hủy'
+                : row.TrangThaiDonHang === 'DA_HOAN_TIEN'
+                  ? 'Đã hoàn tiền'
             : 'Chờ xác nhận',
-    payment: 'COD',
-    deposit: 0,
-    remaining: Number(row.ThanhTien || 0),
-    paymentStatus: row.TrangThaiThanhToan || 'ChuaCoc',
+        statusCode: row.TrangThaiDonHang,
+              payment: row.PhuongThuc || row.payments?.[0]?.PhuongThuc || 'Chưa xác định',
+              paymentStatus: row.payments?.[0]?.TrangThai || row.TrangThaiThanhToan,
     name: row.TenNguoiNhan || '',
     phone: row.SoDienThoaiNhan || '',
     address: row.DiaChiGiaoHang || '',
     shippingFee: Number(row.PhiGiaoHang || 0),
+    subtotal: Number(row.TongTien || 0),
+    discount: Number(row.GiamGia || 0),
+    total: Number(row.ThanhTien || 0),
     items: (row.items ?? []).map((item) => ({
       detailId: item.MaChiTietDonHang,
-      productId: String(item.MaSanPham),
-      variantId: item.MaBienThe,
+      productId: String(item.MaSanPham ?? ''),
+      name: item.TenSanPham,
+      variantId: item.MaBienThe ?? undefined,
       sku: item.SKU,
       color: item.TenMau,
       size: item.TenKichThuoc,
       quantity: Number(item.SoLuong),
       price: Number(item.DonGia),
     })),
-    reviewedProductIds: [],
+    reviewedProductIds: (row.items ?? []).filter((item) => Boolean(item.DaDanhGia)).map((item) => String(item.MaSanPham ?? '')),
   };
 }
 
 export function OrderProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const userKey = user?.phone ?? '';
-  const [ordersByUser, setOrdersByUser] = useState<Record<string, Order[]>>({
-    [mockUser.phone]: mockOrders,
-  });
+  const [ordersByUser, setOrdersByUser] = useState<Record<string, Order[]>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -82,43 +85,17 @@ export function OrderProvider({ children }: { children: ReactNode }) {
     }
 
     setIsLoading(true);
-    AsyncStorage.getItem(ORDER_STORAGE_KEY)
-      .then((stored) => {
-        if (!active) {
-          return;
-        }
-
-        if (stored) {
-          try {
-            const parsed = JSON.parse(stored) as Record<string, Order[]>;
-            setOrdersByUser((current) => ({ ...current, [userKey]: parsed[userKey] ?? current[userKey] ?? mockOrders }));
-          } catch {
-            setOrdersByUser((current) => ({ ...current, [userKey]: current[userKey] ?? mockOrders }));
-          }
-        }
-      })
-      .catch(() => {
-        setOrdersByUser((current) => ({ ...current, [userKey]: current[userKey] ?? mockOrders }));
-      })
-      .finally(() => {
-        if (active) {
-          setIsLoading(false);
-        }
-      });
-
     getApiOrders()
       .then((rows) => {
         if (!active) {
           return;
         }
-        if (rows.length > 0) {
-          const mapped = rows.map(mapApiOrder);
-          setOrdersByUser((current) => ({ ...current, [userKey]: mapped.length > 0 ? mapped : current[userKey] ?? mockOrders }));
-        }
+        setOrdersByUser((current) => ({ ...current, [userKey]: rows.map(mapApiOrder) }));
       })
       .catch(() => {
-        setError('Không kết nối được server đơn hàng, đang dùng dữ liệu local.');
-      });
+        if (active) setError('Không kết nối được máy chủ đơn hàng.');
+      })
+      .finally(() => { if (active) setIsLoading(false); });
 
     return () => {
       active = false;
@@ -127,23 +104,39 @@ export function OrderProvider({ children }: { children: ReactNode }) {
 
   const orders = ordersByUser[userKey] ?? [];
 
+  async function refreshOrders() {
+    if (!userKey) return;
+    const rows = await getApiOrders();
+    setOrdersByUser((current) => ({ ...current, [userKey]: rows.map(mapApiOrder) }));
+  }
+
   const value = useMemo(
     () => ({
       orders,
       isLoading,
       error,
+      refreshOrders,
       getOrderById(id: string) {
-        return orders.find((item) => item.id === id);
+        return orders.find((item) => item.id === id || String(item.serverId) === id);
+      },
+      async cancelOrder(id: string) {
+        const order = orders.find((item) => item.id === id || String(item.serverId) === id);
+        if (!order?.serverId) return 'Không tìm thấy mã đơn hàng trên máy chủ.';
+        try {
+          await cancelOrderApi(order.serverId);
+          await refreshOrders();
+          return null;
+        } catch (error) {
+          return error instanceof Error ? error.message : 'Không thể hủy đơn hàng.';
+        }
       },
       async addOrder(input: NewOrderInput) {
         const order: Order = {
-          id: `DH${String(orders.length + 4).padStart(3, '0')}`,
+          id: '',
           date: new Date().toLocaleDateString('vi-VN'),
           status: 'Chờ xác nhận',
-          payment: 'Cọc 20% + COD',
-          deposit: input.deposit,
-          remaining: input.remaining,
-          paymentStatus: 'ChuaCoc',
+          payment: input.paymentMethod,
+          paymentStatus: 'CHUA_THANH_TOAN',
           name: input.name,
           phone: input.phone,
           address: input.address,
@@ -152,20 +145,20 @@ export function OrderProvider({ children }: { children: ReactNode }) {
           reviewedProductIds: [],
         };
 
-        if (user && user.id) {
-          const response = await createOrderApi({ MaDiaChi: input.addressId, userId: user.id, name: input.name, phone: input.phone, address: input.address, PhuongThuc: 'COD', PhiGiaoHang: 30000 }).catch(() => {
-            setError('Tạo đơn hàng chưa đồng bộ với server, dữ liệu local đã được lưu.');
-            return null;
-          });
-          if (response?.data?.MaDonHang) {
-            order.id = `DH${String(response.data.MaDonHang).padStart(3, '0')}`;
-          }
-        }
+        if (!user?.id) throw new Error('Vui lòng đăng nhập trước khi đặt hàng.');
+        if (!input.addressId) throw new Error('Vui lòng chọn hoặc lưu địa chỉ giao hàng.');
+        const response = await createOrderApi({ MaDiaChi: input.addressId, PhuongThuc: input.paymentMethod, MaGiamGiaCode: input.voucherCode });
+        if (!response.data.MaDonHang) throw new Error('Server không trả về mã đơn hàng.');
+        order.id = response.data.MaDonHangCode;
+        order.serverId = response.data.MaDonHang;
+        order.subtotal = response.data.TongTien;
+        order.discount = response.data.GiamGia;
+        order.shippingFee = response.data.PhiGiaoHang;
+        order.total = response.data.ThanhTien;
 
         if (userKey) {
           setOrdersByUser((allUsers) => {
             const next = [order, ...(allUsers[userKey] ?? [])];
-            AsyncStorage.setItem(ORDER_STORAGE_KEY, JSON.stringify({ ...allUsers, [userKey]: next }));
             return { ...allUsers, [userKey]: next };
           });
         }

@@ -46,7 +46,7 @@ export default function OrderListScreen({ navigation }: Props) {
         {
           text: 'Đánh giá ngay',
           onPress: () => navigation.navigate('ProductReview', {
-            orderId: reviewTarget.order.id,
+            orderId: String(reviewTarget.order.serverId),
             productId: reviewTarget.item.productId,
           }),
         },
@@ -56,7 +56,7 @@ export default function OrderListScreen({ navigation }: Props) {
 
   if (orders.length === 0) {
     return (
-      <EmptyState title="Chưa có đơn hàng" message="Đặt hàng từ giỏ hàng để thấy đơn mẫu." icon="receipt-outline" />
+      <EmptyState title="Chưa có đơn hàng" message="Đơn hàng đã đặt sẽ hiển thị ở đây." icon="receipt-outline" />
     );
   }
 
@@ -70,7 +70,7 @@ export default function OrderListScreen({ navigation }: Props) {
         return (
           <Pressable
             style={styles.card}
-            onPress={() => navigation.navigate('OrderDetail', { orderId: item.id })}
+            onPress={() => navigation.navigate('OrderDetail', { orderId: String(item.serverId) })}
           >
             {first ? (
               <Image source={{ uri: first.image }} style={styles.thumb} contentFit="cover" />

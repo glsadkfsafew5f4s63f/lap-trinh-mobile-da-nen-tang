@@ -29,12 +29,15 @@ exports.register = async (req, res) => {
 
         const hash = await bcrypt.hash(password, 12);
         const [r] = await conn.query(`INSERT INTO NguoiDung (TenDangNhap,MatKhau,HoTen,Email,DienThoai) VALUES (?,?,?,?,?)`, [username,hash,fullName,email||null,phone||null]);
-        const [[role]] = await conn.query(`SELECT MaVaiTro FROM VaiTro WHERE TenVaiTro='KHACH_HANG' AND TrangThai=1 LIMIT 1`);
+        const [[role]] = await conn.query(`SELECT MaVaiTro,TenVaiTro FROM VaiTro WHERE TenVaiTro='KHACH_HANG' AND TrangThai=1 LIMIT 1`);
         if (!role) throw new Error('Chưa có vai trò KHACH_HANG trong database.');
         await conn.query(`INSERT INTO NguoiDungVaiTro (MaNguoiDung,MaVaiTro) VALUES (?,?)`, [r.insertId,role.MaVaiTro]);
         await conn.query(`INSERT INTO GioHang (MaNguoiDung) VALUES (?)`, [r.insertId]);
+        const user = { MaNguoiDung: r.insertId, TenDangNhap: username, HoTen: fullName, Email: email || null, DienThoai: phone || null };
+        const roles = [role.TenVaiTro];
+        const token = tokenFor(user, roles);
         await conn.commit();
-        res.status(201).json({ success:true, message:'Đăng ký thành công.', data:{ MaNguoiDung:r.insertId, TenDangNhap:username, HoTen:fullName, Email:email||null } });
+        res.status(201).json({ success:true, message:'Đăng ký thành công.', token, data:{ ...user, roles } });
     } catch (e) { try { await conn.rollback(); } catch (_) {} res.status(400).json({ success:false, message:e.message }); }
     finally { conn.release(); }
 };

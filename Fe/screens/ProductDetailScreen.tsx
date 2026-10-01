@@ -3,6 +3,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Image } from 'expo-image';
 import { useEffect, useRef, useState } from 'react';
 import {
+    ActivityIndicator,
     Alert,
     Dimensions,
     NativeScrollEvent,
@@ -18,7 +19,6 @@ import { ProductCard } from '../components/ProductCard';
 import { QuantityStepper } from '../components/QuantityStepper';
 import { colors, radius } from '../constants/theme';
 import { useCart } from '../context/CartContext';
-import { useFavorites } from '../context/FavoriteContext';
 import { useOrders } from '../context/OrderContext';
 import { useReviews } from '../context/ReviewContext';
 import { useAuth } from '../context/AuthContext';
@@ -27,7 +27,7 @@ import {
     getProductById,
     getProductVariantStock,
     getRelatedProducts,
-    loadProductsFromApi,
+    loadProductDetailFromApi,
 } from '../data/products';
 import type { RootStackParamList } from './types';
 
@@ -37,8 +37,9 @@ const { width } = Dimensions.get('window');
 
 export default function ProductDetailScreen({ navigation, route }: Props) {
   const [product, setProduct] = useState(() => getProductById(route.params.productId));
+  const [isLoadingDetail, setIsLoadingDetail] = useState(true);
+  const [detailError, setDetailError] = useState<string | null>(null);
   const { addToCart } = useCart();
-  const { isFavorite, toggle } = useFavorites();
   const { orders } = useOrders();
   const { getReviews, loadReviews } = useReviews();
   const { user } = useAuth();
@@ -46,11 +47,14 @@ export default function ProductDetailScreen({ navigation, route }: Props) {
   useEffect(() => {
     let active = true;
 
-    loadProductsFromApi().then(() => {
-      if (active) {
-        setProduct(getProductById(route.params.productId));
-      }
-    });
+    setIsLoadingDetail(true);
+    setDetailError(null);
+    loadProductDetailFromApi(route.params.productId)
+      .then((details) => { if (active) setProduct(details); })
+      .catch((error) => {
+        if (active) setDetailError(error instanceof Error ? error.message : 'Không tải được chi tiết sản phẩm.');
+      })
+      .finally(() => { if (active) setIsLoadingDetail(false); });
 
     void loadReviews(route.params.productId);
 
@@ -67,12 +71,11 @@ export default function ProductDetailScreen({ navigation, route }: Props) {
   if (!product) {
     return (
       <View style={styles.center}>
-        <Text>Không tìm thấy sản phẩm.</Text>
+        {isLoadingDetail ? <ActivityIndicator color={colors.accent} /> : <Text>{detailError || 'Không tìm thấy sản phẩm.'}</Text>}
       </View>
     );
   }
 
-  const liked = isFavorite(product.id);
   const gallery = product.images.length > 0 ? product.images : [product.image];
   const related = getRelatedProducts(product.id);
   const reviews = getReviews(product.id);
@@ -93,7 +96,7 @@ export default function ProductDetailScreen({ navigation, route }: Props) {
     setGalleryIndex(Math.round(event.nativeEvent.contentOffset.x / width));
   }
 
-  function addProduct() {
+  async function addProduct() {
     if (!product) {
       return;
     }
@@ -104,11 +107,19 @@ export default function ProductDetailScreen({ navigation, route }: Props) {
       ]);
       return;
     }
+    if (!selectedVariant) {
+      Alert.alert('Chưa tải được biến thể', detailError || 'Vui lòng thử tải lại chi tiết sản phẩm.');
+      return;
+    }
     if (selectedStock === 0) {
       Alert.alert('Biến thể tạm hết hàng', 'Vui lòng chọn màu hoặc kích thước khác.');
       return;
     }
-    addToCart(product.id, colorIndex, sizeIndex, quantity, selectedVariant?.id, selectedVariant?.sku);
+    const error = await addToCart(product.id, colorIndex, sizeIndex, quantity, selectedVariant?.id, selectedVariant?.sku);
+    if (error) {
+      Alert.alert('Không thể thêm vào giỏ', error);
+      return;
+    }
     Alert.alert(
       'Đã thêm vào giỏ',
       `${product.name}\n${selectedColor?.name} · ${selectedSize} · x${quantity}`,
@@ -138,21 +149,6 @@ export default function ProductDetailScreen({ navigation, route }: Props) {
               <Image key={uri} source={{ uri }} style={styles.galleryImage} contentFit="cover" />
             ))}
           </ScrollView>
-          <Pressable
-            style={styles.heart}
-            onPress={() => {
-              if (!user) {
-                Alert.alert('Cần đăng nhập', 'Bạn cần đăng nhập hoặc đăng ký để yêu thích sản phẩm.', [
-                  { text: 'Để sau' },
-                  { text: 'Đăng nhập', onPress: () => navigation.navigate('Login') },
-                ]);
-                return;
-              }
-              toggle(product.id);
-            }}
-          >
-            <Ionicons name={liked ? 'heart' : 'heart-outline'} size={22} color={liked ? colors.accent : colors.ink} />
-          </Pressable>
           <View style={styles.count}>
             <Text style={styles.countText}>
               {galleryIndex + 1}/{gallery.length}
@@ -188,7 +184,7 @@ export default function ProductDetailScreen({ navigation, route }: Props) {
               {reviews.length > 0 ? `${reviewAverage.toFixed(1)} · ${reviews.length} đánh giá` : 'Chưa có đánh giá'}
             </Text>
           </View>
-          <Text style={styles.price}>{formatPrice(product.price)}</Text>
+          <Text style={styles.price}>{formatPrice(selectedVariant?.price ?? product.price)}</Text>
           {selectedVariant?.sku ? <Text style={styles.sku}>Mã sản phẩm: {selectedVariant.sku}</Text> : null}
           <Text style={styles.description}>{product.description}</Text>
 
@@ -284,7 +280,7 @@ export default function ProductDetailScreen({ navigation, route }: Props) {
                 Alert.alert('Chưa đủ điều kiện', 'Bạn chỉ có thể đánh giá sau khi đơn hàng chứa sản phẩm này đã giao thành công.');
                 return;
               }
-              navigation.navigate('ProductReview', { orderId: reviewOrder.id, productId: product.id });
+              navigation.navigate('ProductReview', { orderId: String(reviewOrder.serverId), productId: product.id });
             }}
           >
             <Ionicons name="create-outline" size={18} color={colors.accent} />
@@ -372,17 +368,6 @@ const styles = StyleSheet.create({
     width,
     height: 520,
     backgroundColor: '#EDE6DC',
-  },
-  heart: {
-    position: 'absolute',
-    right: 16,
-    top: 16,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.92)',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   count: {
     position: 'absolute',

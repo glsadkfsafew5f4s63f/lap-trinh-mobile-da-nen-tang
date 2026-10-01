@@ -14,7 +14,6 @@ import { colors } from './constants/theme';
 import { loadProductsFromApi } from './data/products';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { CartProvider, useCart } from './context/CartContext';
-import { FavoriteProvider } from './context/FavoriteContext';
 import { OrderProvider } from './context/OrderContext';
 import { ReviewProvider } from './context/ReviewContext';
 import AccountInfoScreen from './screens/AccountInfoScreen';
@@ -22,7 +21,6 @@ import AddressScreen from './screens/AddressScreen';
 import CartScreen from './screens/CartScreen';
 import CategoryScreen from './screens/CategoryScreen';
 import CheckoutScreen from './screens/CheckoutScreen';
-import FavoriteScreen from './screens/FavoriteScreen';
 import HomeScreen from './screens/HomeScreen';
 import LoginScreen from './screens/LoginScreen';
 import OrderDetailScreen from './screens/OrderDetailScreen';
@@ -77,16 +75,6 @@ function MainTabs() {
         }}
       />
       <Tab.Screen
-        name="Favorite"
-        component={FavoriteScreen}
-        options={{
-          title: 'Yêu thích',
-          tabBarIcon: ({ color, focused, size }) => (
-            <Ionicons name={focused ? 'heart' : 'heart-outline'} size={size} color={color} />
-          ),
-        }}
-      />
-      <Tab.Screen
         name="Cart"
         component={CartScreen}
         options={{
@@ -117,7 +105,7 @@ export default function App() {
 
   useEffect(() => {
     loadProductsFromApi()
-      .catch((error) => console.warn('Không thể tải catalog từ backend, dùng dữ liệu dự phòng.', error))
+      .catch((error) => console.warn('Không thể tải catalog từ backend; danh sách sản phẩm sẽ trống.', error))
       .finally(() => setCatalogReady(true));
   }, []);
 
@@ -134,7 +122,6 @@ export default function App() {
       <SafeAreaProvider>
         <AuthProvider>
           <CartProvider>
-            <FavoriteProvider>
             <ReviewProvider>
             <OrderProvider>
               <NavigationContainer>
@@ -143,7 +130,6 @@ export default function App() {
               </NavigationContainer>
             </OrderProvider>
             </ReviewProvider>
-            </FavoriteProvider>
           </CartProvider>
         </AuthProvider>
       </SafeAreaProvider>
@@ -152,7 +138,15 @@ export default function App() {
 }
 
 function AuthenticatedNavigator() {
-  const { user } = useAuth();
+  const { user, isReady } = useAuth();
+
+  if (!isReady) {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg }}>
+        <ActivityIndicator color={colors.ink} />
+      </View>
+    );
+  }
 
   return (
     <Stack.Navigator

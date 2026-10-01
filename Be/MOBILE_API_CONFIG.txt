@@ -3,8 +3,12 @@ EXPO GO - CẤU HÌNH KẾT NỐI API
 1. Máy tính chạy Node.js và điện thoại phải cùng mạng LAN.
 2. Không dùng localhost trên Expo Go.
 3. Lấy IPv4 của máy Windows bằng ipconfig.
-4. Ví dụ máy có IP 192.168.1.10:
-   API_BASE_URL=http://192.168.1.10:7000/api
+4. Ví dụ máy có IP 192.168.1.10, cấu hình:
+   EXPO_PUBLIC_API_URL=http://192.168.1.10:7000
+   Không thêm /api vào URL; ứng dụng tự thêm tiền tố này cho từng endpoint.
+
+5. Bản phát hành phải cấu hình EXPO_PUBLIC_API_URL thành origin backend HTTPS thực tế.
+   Nếu thiếu biến này, ứng dụng sẽ báo lỗi cấu hình thay vì gọi domain mẫu.
 
 Web Admin chạy trên cùng máy có thể dùng:
    http://localhost:7000/api

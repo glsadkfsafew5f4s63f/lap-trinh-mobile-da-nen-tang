@@ -10,11 +10,10 @@ import { FilterChip } from '../components/FilterChip';
 import { ProductCard } from '../components/ProductCard';
 import { colors } from '../constants/theme';
 import {
-  brands,
-  categories,
   filterProducts,
   PriceSort,
 } from '../data/products';
+import { getApiBrands, getApiCategories } from '../services/api';
 import type { RootStackParamList } from './types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ProductList'>;
@@ -25,6 +24,8 @@ export default function ProductListScreen({ navigation, route }: Props) {
   const [brand, setBrand] = useState('');
   const [sort, setSort] = useState<PriceSort>('none');
   const [productList, setProductList] = useState(products);
+  const [categoryList, setCategoryList] = useState<{ name: string; image: string }[]>([]);
+  const [brandList, setBrandList] = useState<string[]>([]);
 
   useEffect(() => {
     let active = true;
@@ -34,6 +35,15 @@ export default function ProductListScreen({ navigation, route }: Props) {
         setProductList(data);
       }
     });
+    Promise.all([getApiCategories(), getApiBrands()])
+      .then(([categoryRows, brandRows]) => {
+        setCategoryList(categoryRows.map((row) => ({ name: String(row.TenDanhMuc || ''), image: String(row.HinhAnh || '') })).filter((item) => item.name));
+        setBrandList(brandRows.map((row) => String(row.TenThuongHieu || '')).filter(Boolean));
+      })
+      .catch(() => {
+        setCategoryList([]);
+        setBrandList([]);
+      });
 
     return () => {
       active = false;
@@ -68,7 +78,7 @@ export default function ProductListScreen({ navigation, route }: Props) {
         <Text style={styles.label}>DANH MỤC</Text>
         <View style={styles.chips}>
           <FilterChip label="Tất cả" active={category === ''} onPress={() => setCategory('')} />
-          {categories.map((item) => (
+          {categoryList.map((item) => (
             <FilterChip
               key={item.name}
               label={item.name}
@@ -81,7 +91,7 @@ export default function ProductListScreen({ navigation, route }: Props) {
         <Text style={styles.label}>THƯƠNG HIỆU</Text>
         <View style={styles.chips}>
           <FilterChip label="Tất cả" active={brand === ''} onPress={() => setBrand('')} />
-          {brands.map((item) => (
+          {brandList.map((item) => (
             <FilterChip
               key={item}
               label={item}
