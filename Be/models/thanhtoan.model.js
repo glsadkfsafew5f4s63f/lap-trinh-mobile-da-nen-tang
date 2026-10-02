@@ -3,7 +3,20 @@ const Thanhtoan = {};
 const db = require('../common/db');
 
 Thanhtoan.getAll = async () => {
-    const [rows] = await db.query('SELECT * FROM `thanhtoan`');
+    const [rows] = await db.query(`
+        SELECT payment.*
+        FROM thanhtoan AS payment
+        WHERE NOT EXISTS (
+            SELECT 1
+            FROM thanhtoan AS newer
+            WHERE newer.MaDonHang = payment.MaDonHang
+              AND (
+                  newer.LanThu > payment.LanThu
+                  OR (newer.LanThu = payment.LanThu AND newer.MaThanhToan > payment.MaThanhToan)
+              )
+        )
+        ORDER BY payment.MaThanhToan DESC
+    `);
     return rows;
 };
 

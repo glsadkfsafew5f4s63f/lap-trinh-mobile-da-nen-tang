@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Image } from 'expo-image';
+import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
@@ -11,7 +12,7 @@ import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { useOrders } from '../context/OrderContext';
 import { formatPrice } from '../data/products';
-import { ApiCheckoutQuote, createAddressApi, getApiAddresses, getApiCheckoutQuote, updateAddressApi } from '../services/api';
+import { ApiCheckoutQuote, createAddressApi, createMomoPaymentApi, getApiAddresses, getApiCheckoutQuote, getApiOrder, updateAddressApi } from '../services/api';
 import type { RootStackParamList } from './types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Checkout'>;
@@ -19,7 +20,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Checkout'>;
 export default function CheckoutScreen({ navigation }: Props) {
   const { items, total, clear, isLoading } = useCart();
   const { user } = useAuth();
-  const { addOrder, isLoading: isOrderLoading, error } = useOrders();
+  const { addOrder, refreshOrders, isLoading: isOrderLoading, error } = useOrders();
   const [name, setName] = useState(user?.name || '');
   const [phone, setPhone] = useState(user?.phone || '');
   const [address, setAddress] = useState(user?.address || '');
@@ -32,7 +33,7 @@ export default function CheckoutScreen({ navigation }: Props) {
   const [appliedVoucherCode, setAppliedVoucherCode] = useState('');
   const [checkoutQuote, setCheckoutQuote] = useState<ApiCheckoutQuote | null>(null);
   const [voucherError, setVoucherError] = useState('');
-  const paymentMethod = 'COD';
+  const [paymentMethod, setPaymentMethod] = useState<'COD' | 'MOMO'>('COD');
   const [isCheckingVoucher, setIsCheckingVoucher] = useState(false);
   const [isLoadingQuote, setIsLoadingQuote] = useState(false);
   const shippingFee = checkoutQuote?.PhiGiaoHang ?? null;
@@ -149,9 +150,40 @@ export default function CheckoutScreen({ navigation }: Props) {
       });
 
       await clear();
-      Alert.alert('Đặt hàng thành công', `Đơn ${order.id} đã được lưu.`, [
-        { text: 'Xem đơn hàng', onPress: () => navigation.navigate('MainTabs', { screen: 'Profile' }) },
-      ]);
+      if (paymentMethod === 'MOMO' && order.serverId) {
+        try {
+          const payment = await createMomoPaymentApi(order.serverId);
+          if (payment.mock) {
+            await refreshOrders();
+            await getApiOrder(order.serverId);
+            Alert.alert(
+              'Thanh toán giả lập thành công',
+              `Đơn ${order.id} đã được đánh dấu đã thanh toán. Không thu tiền thật.`,
+              [{ text: 'Xem đơn hàng', onPress: () => navigation.navigate('OrderDetail', { orderId: String(order.serverId) }) }],
+            );
+          } else {
+            const browserResult = await WebBrowser.openAuthSessionAsync(payment.payUrl!, payment.redirectUrl!);
+            await refreshOrders();
+            const latest = await getApiOrder(order.serverId);
+            const paid = latest.TrangThaiThanhToan === 'DA_THANH_TOAN';
+            Alert.alert(
+              paid ? 'Thanh toán thành công' : 'Đơn hàng đang chờ thanh toán',
+              paid ? `Đơn ${order.id} đã được thanh toán.` : browserResult.type === 'cancel' ? `Đơn ${order.id} đã tạo nhưng chưa thanh toán. Bạn có thể thanh toán lại trong chi tiết đơn.` : 'MoMo chưa xác nhận thanh toán. Trạng thái đơn sẽ được cập nhật khi máy chủ nhận kết quả.',
+              [{ text: 'Xem đơn hàng', onPress: () => navigation.navigate('OrderDetail', { orderId: String(order.serverId) }) }],
+            );
+          }
+        } catch (paymentError) {
+          Alert.alert(
+            'Đơn đã tạo, chưa thanh toán',
+            paymentError instanceof Error ? paymentError.message : 'Không khởi tạo được thanh toán MoMo. Bạn có thể thử lại trong chi tiết đơn.',
+            [{ text: 'Xem đơn hàng', onPress: () => navigation.navigate('OrderDetail', { orderId: String(order.serverId) }) }],
+          );
+        }
+      } else {
+        Alert.alert('Đặt hàng thành công', `Đơn ${order.id} đã được lưu.`, [
+          { text: 'Xem đơn hàng', onPress: () => navigation.navigate('MainTabs', { screen: 'Profile' }) },
+        ]);
+      }
     } catch (error) {
       Alert.alert('Không thể đặt hàng', error instanceof Error ? error.message : 'Đơn hàng chưa được lưu.');
     }
@@ -252,12 +284,16 @@ export default function CheckoutScreen({ navigation }: Props) {
 
       <Text style={styles.section}>Phương thức thanh toán</Text>
       <View style={styles.card}>
-        <View style={styles.paymentOption}>
-          <Ionicons name="radio-button-on" size={20} color={colors.accent} />
+        <Pressable style={styles.paymentOption} onPress={() => setPaymentMethod('COD')}>
+          <Ionicons name={paymentMethod === 'COD' ? 'radio-button-on' : 'radio-button-off'} size={20} color={colors.accent} />
           <Text style={styles.bold}>Thanh toán khi nhận hàng (COD)</Text>
-        </View>
+        </Pressable>
+        <Pressable style={styles.paymentOption} onPress={() => setPaymentMethod('MOMO')}>
+          <Ionicons name={paymentMethod === 'MOMO' ? 'radio-button-on' : 'radio-button-off'} size={20} color={colors.accent} />
+          <Text style={styles.bold}>Ví MoMo</Text>
+        </Pressable>
         <Text style={styles.hint}>Tổng thanh toán {formatPrice(grandTotal)}.</Text>
-        <Text style={styles.hint}>Thanh toán trực tuyến chưa khả dụng vì máy chủ chưa tích hợp cổng thanh toán.</Text>
+        <Text style={styles.hint}>{paymentMethod === 'MOMO' ? 'Bạn sẽ được chuyển tới MoMo để xác nhận thanh toán.' : 'Thanh toán trực tiếp cho nhân viên giao hàng khi nhận đơn.'}</Text>
       </View>
 
       {error ? <Text style={styles.errorText}>{error}</Text> : null}

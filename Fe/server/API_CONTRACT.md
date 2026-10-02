@@ -64,7 +64,11 @@ POST   /api/orders                     DonHang + ChiTietDonHang
 GET    /api/orders                     DonHang
 GET    /api/orders/:id                 DonHang + ChiTietDonHang
 PUT    /api/orders/:id/cancel          DonHang + LichSuDonHang + inventory
-POST   /api/payments/:orderId/retry    ThanhToan
+POST   /api/payments/:orderId/momo     Create/reopen MoMo checkout
+POST   /api/payments/:orderId/retry    Retry MoMo payment
+POST   /api/payments/momo/ipn          Verify provider callback and settle payment
+POST   /api/admin/orders/:id/payment/collect-cod  Finance confirms collected COD
+POST   /api/admin/orders/:id/refund    Full refund (MoMo or confirmed manual transfer)
 PUT    /api/user/profile               NguoiDung
 GET    /api/user/addresses             DiaChiGiaoHang
 POST   /api/user/addresses             DiaChiGiaoHang
@@ -72,7 +76,9 @@ PUT    /api/user/addresses/:id         DiaChiGiaoHang
 DELETE /api/user/addresses/:id         DiaChiGiaoHang
 ```
 
-Payment retry currently records a new `ThanhToan` attempt; a real VNPAY/MoMo/bank provider callback is not configured yet. The app does not expose favorites or chat because no corresponding entity/API exists in the schema.
+COD is recorded as paid only after finance confirms collection for a delivered order. MoMo orders are paid only after a valid signed IPN callback; the app return URL is not treated as payment proof. Canceling an unpaid, unshipped order releases held inventory and restores voucher usage exactly once. Paid MoMo orders are refunded through MoMo; COD refunds are recorded only after finance confirms the manual transfer. A delivered order can be refunded/restocked only after finance confirms the returned goods were received. The database creates an invoice when an order transitions to `DA_GIAO`.
+
+Apply `BE/migrations/20261001_payment_lifecycle.sql` to existing databases. Configure `MOMO_PARTNER_CODE`, `MOMO_ACCESS_KEY`, `MOMO_SECRET_KEY`, `MOMO_IPN_URL` (public HTTPS URL), and `MOMO_REDIRECT_URL` in the backend environment before testing MoMo sandbox. The app uses the `anhuyqa://payment-result` redirect scheme by default.
 
 ## Mapping rules
 

@@ -158,7 +158,13 @@ function AdminUserScreen() {
       });
       const body = await response.json();
       if (!response.ok) throw new Error(body.message || "Không thể tạo tài khoản nhân viên.");
-      setRows((current) => [body.data, ...current]);
+      const createdUser: AdminUser = {
+        ...body.data,
+        roles: Array.isArray(body.data.roles)
+          ? body.data.roles.join(", ")
+          : body.data.roles || "",
+      };
+      setRows((current) => [createdUser, ...current]);
       setCreating(false);
       setNewStaffRoleIds([]);
     } catch (error) {

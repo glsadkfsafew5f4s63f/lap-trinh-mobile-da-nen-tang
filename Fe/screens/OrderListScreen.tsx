@@ -21,8 +21,14 @@ function statusColor(status: OrderStatus) {
 }
 
 export default function OrderListScreen({ navigation }: Props) {
-  const { orders } = useOrders();
+  const { orders, refreshOrders } = useOrders();
   const promptedReviews = useRef(new Set<string>());
+  const refreshOrdersRef = useRef(refreshOrders);
+  refreshOrdersRef.current = refreshOrders;
+
+  useEffect(() => navigation.addListener('focus', () => {
+    void refreshOrdersRef.current().catch(() => undefined);
+  }), [navigation]);
 
   useEffect(() => {
     const reviewTarget = orders

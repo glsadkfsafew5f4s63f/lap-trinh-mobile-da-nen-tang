@@ -9,6 +9,10 @@ exports.orderDetail=async(req,res)=>{try{const [[o]]=await db.query(`SELECT dh.*
 
 exports.updateOrderStatus=async(req,res)=>{const c=await db.getConnection();try{const newStatus=req.body.TrangThaiDonHang;const allowed=['CHO_XAC_NHAN','DA_XAC_NHAN','DANG_CHUAN_BI','DANG_GIAO','DA_GIAO','DA_HUY','DA_HOAN_TIEN'];if(!allowed.includes(newStatus))throw new Error('Trạng thái đơn hàng không hợp lệ.');await c.beginTransaction();const [[o]]=await c.query(`SELECT * FROM DonHang WHERE MaDonHang=? FOR UPDATE`,[req.params.id]);if(!o)throw new Error('Không tìm thấy đơn hàng.');if(o.TrangThaiDonHang===newStatus){await c.rollback();return res.json({success:true,message:'Trạng thái không thay đổi.'});}
 const transitions={CHO_XAC_NHAN:['DA_XAC_NHAN','DA_HUY'],DA_XAC_NHAN:['DANG_CHUAN_BI','DA_HUY'],DANG_CHUAN_BI:['DANG_GIAO','DA_HUY'],DANG_GIAO:['DA_GIAO','DA_HOAN_TIEN'],DA_GIAO:['DA_HOAN_TIEN'],DA_HUY:[],DA_HOAN_TIEN:[]};if(!transitions[o.TrangThaiDonHang]?.includes(newStatus))throw new Error(`Không thể chuyển đơn từ ${o.TrangThaiDonHang} sang ${newStatus}.`);
+if(['DANG_GIAO','DA_GIAO'].includes(newStatus)&&o.TrangThaiThanhToan!=='DA_THANH_TOAN'){
+ const [[payment]]=await c.query(`SELECT PhuongThuc FROM ThanhToan WHERE MaDonHang=? ORDER BY LanThu DESC LIMIT 1 FOR UPDATE`,[o.MaDonHang]);
+ if(payment?.PhuongThuc==='MOMO')throw new Error('Không thể chuyển đơn MoMo sang trạng thái giao hàng khi chưa xác nhận thanh toán thành công.');
+}
 const [items]=await c.query(`SELECT ctdh.MaBienThe,ctdh.SoLuong,bt.SoLuongTon,bt.SoLuongTamGiu,bt.SoLuongDaBan FROM ChiTietDonHang ctdh LEFT JOIN BienTheSanPham bt ON bt.MaBienThe=ctdh.MaBienThe WHERE ctdh.MaDonHang=? FOR UPDATE`,[o.MaDonHang]);
 async function history(oldS,newS,note){await c.query(`INSERT INTO LichSuDonHang(MaDonHang,TrangThaiCu,TrangThaiMoi,MaNguoiThayDoi,GhiChu) VALUES(?,?,?,?,?)`,[o.MaDonHang,oldS,newS,req.user.id,note]);}
 if(newStatus==='DANG_GIAO' && o.TrangThaiDonHang!=='DANG_GIAO' && o.TrangThaiDonHang!=='DA_GIAO'){

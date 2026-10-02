@@ -3,6 +3,9 @@ const c = require('../controllers/admin.controller');
 const staff = require('../controllers/staff.controller');
 const customer = require('../controllers/customer.controller');
 const dashboard = require('../controllers/adminDashboard.controller');
+const payment = require('../controllers/payment.controller');
+const orderPayments = require('../utils/orderPayments');
+const returnRequest = require('../controllers/returnRequest.controller');
 const auth = require('../middleware/auth');
 const role = require('../middleware/role');
 const permissions = require('../config/permissions');
@@ -36,7 +39,24 @@ router.put('/discount-programs/:id', allow('promotions'), c.updateProgram);
 
 router.get('/orders', allow('orders'), c.orders);
 router.get('/orders/:id', allow('orders'), c.orderDetail);
-router.put('/orders/:id/status', allow('orders'), c.updateOrderStatus);
+router.post('/orders/:id/payment/collect-cod', allow('finance'), payment.collectCod);
+router.post('/orders/:id/refund', allow('finance'), payment.refund);
+router.get('/return-requests', allow('finance'), returnRequest.listForAdmin);
+router.put('/return-requests/:id/status', allow('finance'), returnRequest.updateStatus);
+router.put('/orders/:id/status', allow('orders'), async (req, res, next) => {
+	if (req.body.TrangThaiDonHang === 'DA_HOAN_TIEN') {
+		return res.status(400).json({ success: false, message: 'Dùng chức năng hoàn tiền để ghi nhận giao dịch hoàn thực tế.' });
+	}
+	if (req.body.TrangThaiDonHang === 'DA_HUY') {
+		try {
+			const result = await orderPayments.cancelAdminOrder({ orderId: Number(req.params.id), userId: req.user.id });
+			return res.json({ success: true, data: result });
+		} catch (error) {
+			return res.status(400).json({ success: false, message: error.message });
+		}
+	}
+	next();
+}, c.updateOrderStatus);
 router.get('/reviews', allow('customers'), c.reviews);
 router.put('/reviews/:id/reply', allow('customers'), c.replyReview);
 router.put('/reviews/:id/status', allow('customers'), c.updateReviewStatus);

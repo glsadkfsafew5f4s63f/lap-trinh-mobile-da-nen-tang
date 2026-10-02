@@ -46,7 +46,10 @@ exports.login = async (req, res) => {
     try {
         const { username, password } = req.body;
         if (!username || !password) return res.status(400).json({ success:false, message:'Vui lòng nhập tài khoản và mật khẩu.' });
-        const [rows] = await db.query(`SELECT * FROM NguoiDung WHERE TenDangNhap=? LIMIT 1`, [username]);
+        let [rows] = await db.query(`SELECT * FROM NguoiDung WHERE TenDangNhap=? LIMIT 1`, [username]);
+        if (!rows.length) {
+            [rows] = await db.query(`SELECT * FROM NguoiDung WHERE DienThoai=? LIMIT 1`, [username]);
+        }
         if (!rows.length) return res.status(401).json({ success:false, message:'Tài khoản hoặc mật khẩu không đúng.' });
         const user = rows[0];
         if (user.TrangThai !== 'HOAT_DONG') return res.status(403).json({ success:false, message:'Tài khoản đang bị khóa.' });

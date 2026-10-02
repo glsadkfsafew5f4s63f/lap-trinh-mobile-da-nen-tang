@@ -5,6 +5,7 @@ import './dashboard-data.css'
 import ProductManagement from './ProductManagement'
 import OrderManagement from './OrderManagement'
 import FinancialManagement from './FinancialManagement'
+import ReturnManagement from './ReturnManagement'
 import CustomerManagement from './CustomerManagement'
 import PromotionManagement from './PromotionManagement'
 import WarehouseManagement from './WarehouseManagement'
@@ -42,7 +43,7 @@ const normalizeDashboardData = (value: Partial<DashboardData> | null | undefined
 const sections: Array<{ label: string; items: Nav[] }> = [
   { label: 'TỔNG QUAN', items: [{ icon: '▦', label: 'Tổng quan', key: 'overview' }] },
   { label: 'SẢN PHẨM', items: [{ icon: '◈', label: 'Danh sách sản phẩm', key: 'products' }, { icon: '◇', label: 'Biến thể sản phẩm', key: 'variants' }, { icon: '▤', label: 'Danh mục', key: 'categories' }, { icon: '◉', label: 'Thương hiệu', key: 'brands' }, { icon: '◌', label: 'Màu sắc', key: 'colors' }, { icon: '▱', label: 'Kích thước', key: 'sizes' }, { icon: '▧', label: 'Hình ảnh sản phẩm', key: 'images' }] },
-  { label: 'ĐƠN HÀNG', items: [{ icon: '☷', label: 'Danh sách đơn hàng', key: 'orders' }, { icon: '◷', label: 'Lịch sử đơn hàng', key: 'history' }, { icon: '↯', label: 'Thanh toán', key: 'payments' }, { icon: '▣', label: 'Hóa đơn', key: 'invoices' }] },
+  { label: 'ĐƠN HÀNG', items: [{ icon: '☷', label: 'Danh sách đơn hàng', key: 'orders' }, { icon: '◷', label: 'Lịch sử đơn hàng', key: 'history' }, { icon: '↩', label: 'Yêu cầu trả hàng', key: 'returns' }, { icon: '↯', label: 'Thanh toán', key: 'payments' }, { icon: '▣', label: 'Hóa đơn', key: 'invoices' }] },
   { label: 'KHÁCH HÀNG', items: [{ icon: '♙', label: 'Người dùng', key: 'users' }, { icon: '☆', label: 'Đánh giá', key: 'reviews' }] },
   { label: 'KHUYẾN MÃI', items: [{ icon: '⌁', label: 'Mã giảm giá', key: 'vouchers' }, { icon: '%', label: 'Chương trình giảm giá', key: 'discounts' }, { icon: 'ϟ', label: 'Flash Sale', key: 'flash-sale' }] },
   { label: 'KHO HÀNG', items: [{ icon: '▥', label: 'Tồn kho', key: 'inventory' }, { icon: '▰', label: 'Nhà cung cấp', key: 'suppliers' }, { icon: '▤', label: 'Phiếu nhập', key: 'purchase-orders' }, { icon: '⌁', label: 'Lịch sử tồn kho', key: 'stock-history' }] },
@@ -53,7 +54,7 @@ const roleByMenuKey: Record<string, string> = {
   overview: 'NHAN_VIEN_BAO_CAO', 'admin-users': 'ADMIN', roles: 'ADMIN',
   products: 'NHAN_VIEN_SAN_PHAM', variants: 'NHAN_VIEN_SAN_PHAM', categories: 'NHAN_VIEN_SAN_PHAM', brands: 'NHAN_VIEN_SAN_PHAM', colors: 'NHAN_VIEN_SAN_PHAM', sizes: 'NHAN_VIEN_SAN_PHAM', images: 'NHAN_VIEN_SAN_PHAM',
   orders: 'NHAN_VIEN_DON_HANG', history: 'NHAN_VIEN_DON_HANG',
-  payments: 'NHAN_VIEN_TAI_CHINH', invoices: 'NHAN_VIEN_TAI_CHINH',
+  payments: 'NHAN_VIEN_TAI_CHINH', invoices: 'NHAN_VIEN_TAI_CHINH', returns: 'NHAN_VIEN_TAI_CHINH',
   users: 'NHAN_VIEN_KHACH_HANG', reviews: 'NHAN_VIEN_KHACH_HANG',
   vouchers: 'NHAN_VIEN_KHUYEN_MAI', discounts: 'NHAN_VIEN_KHUYEN_MAI', 'flash-sale': 'NHAN_VIEN_KHUYEN_MAI',
   inventory: 'NHAN_VIEN_KHO', suppliers: 'NHAN_VIEN_KHO', 'purchase-orders': 'NHAN_VIEN_KHO', 'stock-history': 'NHAN_VIEN_KHO',
@@ -77,7 +78,7 @@ function AdminApp({ onLogout, roles }: { onLogout: () => void; roles: string[] }
   const title = sections.flatMap((section) => section.items).find((item) => item.key === active)?.label || 'Tổng quan'
   const productModes = ['products', 'variants', 'categories', 'brands', 'colors', 'sizes', 'images']
   const toggleGroup = (label: string) => setOpenGroups((current) => ({ ...current, [label]: !current[label] }))
-  const content = !active ? <NoAccess /> : productModes.includes(active) ? <ProductManagement mode={active} /> : ['orders', 'history'].includes(active) ? <OrderManagement mode={active} /> : ['payments', 'invoices'].includes(active) ? <FinancialManagement mode={active as 'payments' | 'invoices'} /> : ['users', 'reviews'].includes(active) ? <CustomerManagement mode={active} /> : ['vouchers', 'discounts', 'flash-sale'].includes(active) ? <PromotionManagement mode={active} /> : ['inventory', 'suppliers', 'purchase-orders', 'stock-history'].includes(active) ? <WarehouseManagement mode={active} /> : active === 'contacts' ? <ContactManagement /> : ['admin-users', 'roles'].includes(active) ? <SystemManagement mode={active} /> : <Dashboard data={data} range={range} setRange={setRange} setActive={setActive} />
+  const content = !active ? <NoAccess /> : productModes.includes(active) ? <ProductManagement mode={active} /> : ['orders', 'history'].includes(active) ? <OrderManagement mode={active} /> : active === 'returns' ? <ReturnManagement /> : ['payments', 'invoices'].includes(active) ? <FinancialManagement mode={active as 'payments' | 'invoices'} /> : ['users', 'reviews'].includes(active) ? <CustomerManagement mode={active} /> : ['vouchers', 'discounts', 'flash-sale'].includes(active) ? <PromotionManagement mode={active} /> : ['inventory', 'suppliers', 'purchase-orders', 'stock-history'].includes(active) ? <WarehouseManagement mode={active} /> : active === 'contacts' ? <ContactManagement /> : ['admin-users', 'roles'].includes(active) ? <SystemManagement mode={active} /> : <Dashboard data={data} range={range} setRange={setRange} setActive={setActive} />
   return (
     <div className="admin-shell">
       <aside className="sidebar">

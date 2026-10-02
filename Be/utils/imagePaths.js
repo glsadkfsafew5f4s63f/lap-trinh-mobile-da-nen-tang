@@ -12,8 +12,17 @@ const imageExtensions = {
 
 function toPublicImageUrl(value) {
     if (typeof value !== 'string' || !value.trim()) return null;
-    const input = value.trim();
-    if (/^https?:\/\//i.test(input)) return input;
+    let input = value.trim();
+    if (/^https?:\/\//i.test(input)) {
+        try {
+            const url = new URL(input);
+            const localHosts = new Set(['localhost', '127.0.0.1', '[::1]']);
+            if (!localHosts.has(url.hostname.toLowerCase()) || !url.pathname.toLowerCase().startsWith('/uploads/')) return input;
+            input = url.pathname;
+        } catch {
+            return input;
+        }
+    }
 
     const relative = input.replace(/\\/g, '/').replace(/^\/+/, '').replace(/^uploads\//i, '');
     const candidates = [relative, path.basename(relative)];

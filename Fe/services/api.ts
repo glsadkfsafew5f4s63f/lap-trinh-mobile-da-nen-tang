@@ -18,7 +18,15 @@ type Envelope<T> = { success: boolean; data: T; message?: string }
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   if (!API_BASE_URL) throw new Error('Thiếu EXPO_PUBLIC_API_URL cho bản phát hành.')
   const token = await AsyncStorage.getItem(TOKEN_KEY)
-  const response = await fetch(`${API_BASE_URL}${path}`, { ...options, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(options.headers || {}) } })
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(API_BASE_URL.includes('ngrok') ? { 'ngrok-skip-browser-warning': 'true' } : {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(options.headers || {}),
+    },
+  })
   const body = await response.json().catch(() => null) as T | Envelope<T> | { message?: string } | null
   if (!response.ok) throw new Error((body as { message?: string } | null)?.message || `API request failed: ${response.status}`)
   if (body && typeof body === 'object' && 'success' in body && 'data' in body) {
@@ -101,7 +109,15 @@ export async function createOrderApi(payload: { MaDiaChi: number; PhuongThuc: st
 }
 export function previewVoucherApi(code: string, subtotal: number) { return request<{ MaCode: string; GiamGia: number; TongSauGiam: number }>('/api/orders/voucher/preview', { method: 'POST', body: JSON.stringify({ code, subtotal }) }) }
 export function cancelOrderApi(id: number) { return request<{ message: string }>(`/api/orders/${id}/cancel`, { method: 'PUT' }) }
-export function retryPaymentApi(orderId: number, method: string) { return request<{ MaThanhToan: number; LanThu: number; SoTien: number; PhuongThuc: string }>(`/api/payments/${orderId}/retry`, { method: 'POST', body: JSON.stringify({ PhuongThuc: method }) }) }
+export type ApiMomoPayment = { payUrl?: string; redirectUrl?: string; mock?: boolean; message?: string }
+export function createMomoPaymentApi(orderId: number) { return request<ApiMomoPayment>(`/api/payments/${orderId}/momo`, { method: 'POST' }) }
+export function retryPaymentApi(orderId: number, method: string) {
+  if (method !== 'MOMO') throw new Error('Hiện chỉ hỗ trợ thanh toán lại qua MoMo.')
+  return createMomoPaymentApi(orderId)
+}
+export type ApiReturnRequest = { MaYeuCauTraHang: number; MaDonHang: number; LyDo: string; TrangThai: 'CHO_DUYET' | 'DA_DUYET' | 'DA_NHAN_HANG' | 'TU_CHOI' | 'DA_HOAN_TIEN'; GhiChuXuLy?: string | null; NgayTao: string; NgayNhanHang?: string | null; NgayHoanTien?: string | null }
+export function getReturnRequestApi(orderId: number) { return request<ApiReturnRequest | null>(`/api/orders/${orderId}/return-requests`) }
+export function createReturnRequestApi(orderId: number, reason: string) { return request<ApiReturnRequest>(`/api/orders/${orderId}/return-requests`, { method: 'POST', body: JSON.stringify({ LyDo: reason }) }) }
 export function createAddressApi(payload: { TenNguoiNhan: string; SoDienThoai: string; DiaChiChiTiet: string; PhuongXa?: string; QuanHuyen?: string; TinhThanh?: string; LaMacDinh?: number }) { return request<{ insertId: number }>('/api/user/addresses', { method: 'POST', body: JSON.stringify(payload) }) }
 export type ApiAddress = { MaDiaChi: number; TenNguoiNhan: string; SoDienThoai: string; DiaChiChiTiet: string; PhuongXa?: string; QuanHuyen?: string; TinhThanh?: string; LaMacDinh: number }
 export function getApiAddresses() { return request<ApiAddress[]>('/api/user/addresses') }

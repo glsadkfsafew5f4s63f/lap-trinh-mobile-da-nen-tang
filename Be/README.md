@@ -28,6 +28,18 @@ npm install
 npm start
 ```
 
+## Quy trình thanh toán
+
+Sau khi cập nhật database hiện có, chạy lần lượt `migrations/20261001_payment_lifecycle.sql` và `migrations/20261002_product_returns.sql`. Migration thanh toán thêm idempotency cho việc hoàn voucher, dữ liệu checkout/refund MoMo và trigger tự tạo hóa đơn khi đơn chuyển sang `DA_GIAO`; migration trả hàng thêm trạng thái yêu cầu trả toàn bộ đơn. Schema khởi tạo mới trong `shopqa.sql` đã có cờ voucher và trigger hóa đơn.
+
+Sao chép các biến MoMo từ `.env.example` vào `.env`, điền thông tin merchant sandbox và đặt `MOMO_IPN_URL` thành HTTPS endpoint công khai trỏ tới `/api/payments/momo/ipn`. Không commit merchant secrets. `MOMO_REDIRECT_URL` mặc định là `anhuyqa://payment-result`.
+
+Để demo không cần merchant, đặt `MOMO_MOCK_PAYMENTS=true` trong `.env`. Chế độ này chỉ hoạt động khi `NODE_ENV` khác `production`; nó cập nhật trạng thái thanh toán cục bộ và không thu hoặc hoàn tiền thật. Giá trị mặc định trong `.env.example` là `false`.
+
+COD chỉ chuyển sang đã thanh toán khi nhân viên tài chính xác nhận đã thu tiền của đơn đã giao. MoMo chỉ được xác nhận bởi IPN có chữ ký hợp lệ. Hoàn MoMo gọi API hoàn tiền; hoàn COD cần nhân viên tài chính xác nhận chuyển khoản thủ công. Đơn đã giao chỉ được hoàn/nhập kho lại sau khi xác nhận đã nhận hàng trả.
+
+Middleware xác thực trạng thái tài khoản và các role đang hoạt động trong database ở mỗi request; khóa người dùng hoặc gỡ role có hiệu lực ngay cả với JWT đã phát hành trước đó.
+
 ## API mặc định
 
 | Method | URL | Chức năng |

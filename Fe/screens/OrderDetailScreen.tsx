@@ -1,4 +1,5 @@
 import { Image } from 'expo-image';
+import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -10,7 +11,8 @@ import { mapApiOrder, useOrders } from '../context/OrderContext';
 import { useReviews } from '../context/ReviewContext';
 import { getOrderTotal, Order } from '../data/orders';
 import { formatPrice, getProductById } from '../data/products';
-import { getApiOrder, retryPaymentApi } from '../services/api';
+import { createReturnRequestApi, getApiOrder, getReturnRequestApi, retryPaymentApi } from '../services/api';
+import type { ApiReturnRequest } from '../services/api';
 import type { RootStackParamList } from './types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'OrderDetail'>;
@@ -24,6 +26,8 @@ export default function OrderDetailScreen({ navigation, route }: Props) {
   const [stars, setStars] = useState(5);
   const [comment, setComment] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [returnRequest, setReturnRequest] = useState<ApiReturnRequest | null>(null);
+  const [returnReason, setReturnReason] = useState('');
 
   useEffect(() => {
     let active = true;
@@ -32,6 +36,9 @@ export default function OrderDetailScreen({ navigation, route }: Props) {
     void getApiOrder(serverId)
       .then((row) => { if (active) setServerOrder(mapApiOrder(row)); })
       .catch((error) => { if (active) Alert.alert('Không tải được đơn hàng', error instanceof Error ? error.message : 'Vui lòng thử lại.'); });
+    void getReturnRequestApi(serverId)
+      .then((row) => { if (active) setReturnRequest(row); })
+      .catch((error) => { if (active) Alert.alert('Không tải được yêu cầu trả hàng', error instanceof Error ? error.message : 'Vui lòng thử lại.'); });
     return () => { active = false; };
   }, [route.params.orderId]);
 
@@ -177,17 +184,27 @@ export default function OrderDetailScreen({ navigation, route }: Props) {
           ])}
         />
       ) : null}
-      {order.paymentStatus === 'THAT_BAI' && order.serverId ? (
+      {['THAT_BAI', 'CHO_XU_LY'].includes(order.paymentStatus || '') && order.payment === 'MOMO' && order.serverId ? (
         <AppButton
-          label={isUpdatingOrder ? 'ĐANG TẠO LƯỢT THANH TOÁN...' : 'THỬ THANH TOÁN LẠI'}
+          label={isUpdatingOrder ? 'ĐANG MỞ MOMO...' : order.paymentStatus === 'THAT_BAI' ? 'THỬ THANH TOÁN LẠI' : 'TIẾP TỤC THANH TOÁN'}
           disabled={isUpdatingOrder}
           onPress={async () => {
             setIsUpdatingOrder(true);
             try {
-              await retryPaymentApi(order.serverId!, order.payment === 'Chưa xác định' ? 'VNPAY' : order.payment);
-              const detail = await getApiOrder(order.serverId!);
-              setServerOrder(mapApiOrder(detail));
-              Alert.alert('Đã tạo lượt thanh toán', 'Đã ghi nhận lần thử mới. Cổng thanh toán cần được xử lý bởi nhà cung cấp.');
+              const payment = await retryPaymentApi(order.serverId!, 'MOMO');
+              if (payment.mock) {
+                const detail = await getApiOrder(order.serverId!);
+                setServerOrder(mapApiOrder(detail));
+                Alert.alert('Thanh toán giả lập thành công', 'Đơn hàng đã được đánh dấu đã thanh toán. Không thu tiền thật.');
+              } else {
+                await WebBrowser.openAuthSessionAsync(payment.payUrl!, payment.redirectUrl!);
+                const detail = await getApiOrder(order.serverId!);
+                setServerOrder(mapApiOrder(detail));
+                Alert.alert(
+                  detail.TrangThaiThanhToan === 'DA_THANH_TOAN' ? 'Thanh toán thành công' : 'Đang chờ MoMo xác nhận',
+                  detail.TrangThaiThanhToan === 'DA_THANH_TOAN' ? 'Đơn hàng đã được thanh toán.' : 'Trạng thái sẽ đổi sau khi máy chủ nhận kết quả từ MoMo.',
+                );
+              }
             } catch (error) {
               Alert.alert('Không thể thanh toán lại', error instanceof Error ? error.message : 'Vui lòng thử lại.');
             } finally {
@@ -195,6 +212,48 @@ export default function OrderDetailScreen({ navigation, route }: Props) {
             }
           }}
         />
+      ) : null}
+      {order.statusCode === 'DA_GIAO' && ['DA_THANH_TOAN', 'THANH_CONG'].includes(order.paymentStatus || '') && order.serverId ? (
+        <View style={styles.returnSection}>
+          <Text style={styles.section}>Trả hàng</Text>
+          {returnRequest ? (
+            <View style={styles.card}>
+              <Text style={styles.bold}>Trạng thái: {returnRequest.TrangThai === 'CHO_DUYET' ? 'Chờ cửa hàng duyệt' : returnRequest.TrangThai === 'DA_DUYET' ? 'Đã duyệt, vui lòng gửi hàng về cửa hàng' : returnRequest.TrangThai === 'DA_NHAN_HANG' ? 'Cửa hàng đã nhận hàng, đang chờ hoàn tiền' : returnRequest.TrangThai === 'DA_HOAN_TIEN' ? 'Đã hoàn tiền' : 'Yêu cầu bị từ chối'}</Text>
+              <Text style={styles.meta}>Lý do: {returnRequest.LyDo}</Text>
+              {returnRequest.GhiChuXuLy ? <Text style={styles.meta}>Phản hồi: {returnRequest.GhiChuXuLy}</Text> : null}
+            </View>
+          ) : null}
+          {(!returnRequest || returnRequest.TrangThai === 'TU_CHOI') ? (
+            <View style={styles.reviewForm}>
+              <Text style={styles.meta}>Bạn có thể gửi yêu cầu trả toàn bộ đơn. Cửa hàng sẽ xem xét trước khi nhận hàng và hoàn tiền.</Text>
+              <AppInput
+                value={returnReason}
+                onChangeText={setReturnReason}
+                placeholder="Mô tả lý do trả hàng..."
+                multiline
+                label="Lý do trả hàng"
+                style={styles.commentInput}
+              />
+              <AppButton
+                label={isUpdatingOrder ? 'ĐANG GỬI...' : 'GỬI YÊU CẦU TRẢ HÀNG'}
+                disabled={isUpdatingOrder || !returnReason.trim()}
+                onPress={async () => {
+                  setIsUpdatingOrder(true);
+                  try {
+                    const created = await createReturnRequestApi(order.serverId!, returnReason.trim());
+                    setReturnRequest(created);
+                    setReturnReason('');
+                    Alert.alert('Đã gửi yêu cầu', 'Cửa hàng sẽ xem xét yêu cầu trả hàng của bạn.');
+                  } catch (error) {
+                    Alert.alert('Không gửi được yêu cầu', error instanceof Error ? error.message : 'Vui lòng thử lại.');
+                  } finally {
+                    setIsUpdatingOrder(false);
+                  }
+                }}
+              />
+            </View>
+          ) : null}
+        </View>
       ) : null}
     </ScrollView>
   );
@@ -268,6 +327,9 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     backgroundColor: '#FBF4EC',
     gap: 10,
+  },
+  returnSection: {
+    marginTop: 8,
   },
   reviewFormTitle: {
     color: colors.ink,
