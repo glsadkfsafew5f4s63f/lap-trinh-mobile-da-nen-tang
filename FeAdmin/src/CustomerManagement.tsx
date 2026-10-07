@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import "./customer.css";
 import ReviewAdminScreen from "./ReviewAdminScreen";
+import { PaginationControls, usePaginatedRows } from "./PaginationControls";
 
 type User = {
   MaNguoiDung: number;
@@ -56,6 +57,7 @@ function UserScreen() {
         .toLowerCase()
         .includes(query.toLowerCase()),
   );
+        const pagination = usePaginatedRows(filtered, `${filter}:${query}`);
   const setStatus = async (row: User) => {
     const next = row.TrangThai === "HOAT_DONG" ? "KHOA" : "HOAT_DONG";
     try {
@@ -153,7 +155,7 @@ function UserScreen() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((row) => (
+            {pagination.pageRows.map((row) => (
               <tr key={row.MaNguoiDung}>
                 <td>
                   <strong>{row.HoTen}</strong>
@@ -187,6 +189,7 @@ function UserScreen() {
             ))}
           </tbody>
         </table>
+        <PaginationControls {...pagination} onPageChange={pagination.setPage} />
         {filtered.length === 0 && (
           <div className="empty-state">Không có khách hàng phù hợp.</div>
         )}

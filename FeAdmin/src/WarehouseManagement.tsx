@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import "./warehouse.css";
 import SupplierAdminScreen from "./SupplierAdminScreen";
+import { PaginationControls, usePaginatedRows } from "./PaginationControls";
 
 type Stock = {
   MaBienThe: number;
@@ -111,6 +112,7 @@ function InventoryScreen() {
         .toLowerCase()
         .includes(query.toLowerCase()),
   );
+        const pagination = usePaginatedRows(filtered, `${filter}:${query}`);
   return (
     <WarehouseShell
       eyebrow="KHO HÀNG / TỒN KHO"
@@ -200,7 +202,7 @@ function InventoryScreen() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((row) => (
+            {pagination.pageRows.map((row) => (
               <tr key={row.MaBienThe}>
                 <td>
                   <strong>{row.TenSanPham}</strong>
@@ -233,6 +235,7 @@ function InventoryScreen() {
             ))}
           </tbody>
         </table>
+        <PaginationControls {...pagination} onPageChange={pagination.setPage} />
       </TableBox>
     </WarehouseShell>
   );
@@ -264,6 +267,14 @@ function PurchaseScreen() {
   useEffect(() => {
     void load();
   }, []);
+  const filtered = rows.filter(
+    (row) =>
+      (filter === "ALL" || row.TrangThai === filter) &&
+      `${row.SoPhieuNhap} ${row.TenNhaCungCap}`
+        .toLowerCase()
+        .includes(query.toLowerCase()),
+  );
+  const pagination = usePaginatedRows(filtered, `${filter}:${query}`);
   if (creating)
     return (
       <PurchaseCreateForm
@@ -285,13 +296,6 @@ function PurchaseScreen() {
         }}
       />
     );
-  const filtered = rows.filter(
-    (row) =>
-      (filter === "ALL" || row.TrangThai === filter) &&
-      `${row.SoPhieuNhap} ${row.TenNhaCungCap}`
-        .toLowerCase()
-        .includes(query.toLowerCase()),
-  );
   return (
     <WarehouseShell
       eyebrow="KHO HÀNG / PHIẾU NHẬP"
@@ -353,7 +357,7 @@ function PurchaseScreen() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((row) => (
+            {pagination.pageRows.map((row) => (
               <tr key={row.MaPhieuNhap}>
                 <td>
                   <button
@@ -406,6 +410,7 @@ function PurchaseScreen() {
             ))}
           </tbody>
         </table>
+        <PaginationControls {...pagination} onPageChange={pagination.setPage} />
       </TableBox>
     </WarehouseShell>
   );
@@ -876,6 +881,7 @@ function HistoryScreen() {
         .toLowerCase()
         .includes(query.toLowerCase()),
   );
+        const pagination = usePaginatedRows(filtered, `${filter}:${query}`);
   return (
     <WarehouseShell
       eyebrow="KHO HÀNG / LỊCH SỬ TỒN KHO"
@@ -940,7 +946,7 @@ function HistoryScreen() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((row) => (
+            {pagination.pageRows.map((row) => (
               <tr key={row.MaLichSuTonKho}>
                 <td>{date(row.NgayTao)}</td>
                 <td>
@@ -974,6 +980,7 @@ function HistoryScreen() {
             ))}
           </tbody>
         </table>
+        <PaginationControls {...pagination} onPageChange={pagination.setPage} />
         {!loading && filtered.length === 0 && (
           <div className="empty-state">Không có lịch sử tồn kho phù hợp.</div>
         )}

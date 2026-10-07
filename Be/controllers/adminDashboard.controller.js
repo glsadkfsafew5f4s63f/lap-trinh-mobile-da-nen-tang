@@ -2,7 +2,7 @@ const db = require('../common/db');
 
 exports.dashboard = async (_req, res) => {
     try {
-        const [[users], [products], [orders], [revenue], [stock], [pending], [lowStock], [activeProducts]] = await Promise.all([
+        const [[[users]], [[products]], [[orders]], [[revenue]], [[stock]], [[pending]], [[lowStock]], [[activeProducts]]] = await Promise.all([
             db.query('SELECT COUNT(*) total FROM NguoiDung'),
             db.query('SELECT COUNT(*) total FROM SanPham'),
             db.query('SELECT COUNT(*) total FROM DonHang'),

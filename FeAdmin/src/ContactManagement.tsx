@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import "./contact.css";
+import { PaginationControls, usePaginatedRows } from "./PaginationControls";
 
 type Contact = {
   MaLienHe: number;
@@ -66,6 +67,7 @@ export default function ContactManagement() {
         .toLowerCase()
         .includes(query.toLowerCase()),
   );
+        const pagination = usePaginatedRows(filtered, `${filter}:${query}`);
   const update = async (row: Contact, next: Contact["TrangThai"]) => {
     try {
       const processedAt =
@@ -182,7 +184,7 @@ export default function ContactManagement() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((row) => (
+                {pagination.pageRows.map((row) => (
                   <tr
                     className={
                       selected?.MaLienHe === row.MaLienHe ? "active-row" : ""
@@ -220,6 +222,7 @@ export default function ContactManagement() {
                 ))}
               </tbody>
             </table>
+            <PaginationControls {...pagination} onPageChange={pagination.setPage} />
             {filtered.length === 0 && (
               <div className="empty-state">Không có yêu cầu phù hợp.</div>
             )}

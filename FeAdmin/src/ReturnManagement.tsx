@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import './order.css'
+import { PaginationControls, usePaginatedRows } from './PaginationControls'
 
 type ReturnRequest = {
   MaYeuCauTraHang: number
@@ -49,6 +50,7 @@ export default function ReturnManagement() {
   }
 
   useEffect(() => { void load() }, [])
+  const pagination = usePaginatedRows(rows, 'return-requests')
 
   const update = async (row: ReturnRequest, next: 'DA_DUYET' | 'TU_CHOI' | 'DA_NHAN_HANG') => {
     let note = ''
@@ -119,7 +121,7 @@ export default function ReturnManagement() {
         <table className="order-table">
           <thead><tr><th>Yêu cầu / ngày tạo</th><th>Khách hàng</th><th>Đơn hàng</th><th>Lý do</th><th>Thanh toán</th><th>Trạng thái</th><th>Thao tác</th></tr></thead>
           <tbody>
-            {rows.map((row) => (
+            {pagination.pageRows.map((row) => (
               <tr key={row.MaYeuCauTraHang}>
                 <td>#{row.MaYeuCauTraHang}<small>{date(row.NgayTao)}</small></td>
                 <td><strong>{row.TenKhachHang}</strong><small>{row.DienThoai || '-'}</small></td>
@@ -139,6 +141,7 @@ export default function ReturnManagement() {
             {!loading && rows.length === 0 ? <tr><td colSpan={7}>Chưa có yêu cầu trả hàng.</td></tr> : null}
           </tbody>
         </table>
+        <PaginationControls {...pagination} onPageChange={pagination.setPage} />
       </div>
     </section>
   )

@@ -67,14 +67,43 @@ const statusLabel: Record<string, string> = { CHO_XAC_NHAN: 'Chờ xác nhận',
 
 function AdminApp({ onLogout, roles }: { onLogout: () => void; roles: string[] }) {
   const isAdmin = roles.includes('ADMIN')
+  const canViewOverview = roles.includes(roleByMenuKey.overview)
   const visibleSections = sections.map((section) => ({ ...section, items: section.items.filter((item) => isAdmin ? adminMenuKeys.has(item.key) : roles.includes(roleByMenuKey[item.key])) })).filter((section) => section.items.length)
   const firstMenuKey = visibleSections.flatMap((section) => section.items)[0]?.key || ''
   const [active, setActive] = useState(firstMenuKey)
   const [range, setRange] = useState('30 ngày qua')
   const [data, setData] = useState(emptyData)
   const [loading, setLoading] = useState(false)
+  const [dashboardError, setDashboardError] = useState('')
+  const [dashboardRefresh, setDashboardRefresh] = useState(0)
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => Object.fromEntries(sections.map((section) => [section.label, section.label === 'TỔNG QUAN' || section.label === 'SẢN PHẨM'])))
-  useEffect(() => { if (!isAdmin) return; const load = async () => { setLoading(true); try { const token = localStorage.getItem('admin_token'); const response = await fetch(`${API}/api/admin/dashboard`, { headers: token ? { Authorization: `Bearer ${token}` } : undefined }); if (response.ok) { const body = await response.json(); setData(normalizeDashboardData(body.data)) } } finally { setLoading(false) } }; void load() }, [isAdmin])
+  useEffect(() => {
+    if (!canViewOverview) return;
+    let active = true;
+    const load = async () => {
+      setLoading(true);
+      setDashboardError('');
+      try {
+        const token = localStorage.getItem('admin_token');
+        const response = await fetch(`${API}/api/admin/dashboard`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        });
+        const body = await response.json().catch(() => null);
+        if (!response.ok) throw new Error(body?.message || 'Không thể tải dữ liệu tổng quan từ BE.');
+        if (active) setData(normalizeDashboardData(body?.data));
+      } catch (error) {
+        if (active) {
+          setDashboardError(error instanceof Error ? error.message : 'Không thể kết nối BE.');
+        }
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+    void load();
+    return () => {
+      active = false;
+    };
+  }, [canViewOverview, dashboardRefresh]);
   const title = sections.flatMap((section) => section.items).find((item) => item.key === active)?.label || 'Tổng quan'
   const productModes = ['products', 'variants', 'categories', 'brands', 'colors', 'sizes', 'images']
   const toggleGroup = (label: string) => setOpenGroups((current) => ({ ...current, [label]: !current[label] }))
@@ -140,6 +169,30 @@ function AdminApp({ onLogout, roles }: { onLogout: () => void; roles: string[] }
             </div>
           </div>
         </header>
+        {active === 'overview' && dashboardError ? (
+          <div
+            role="alert"
+            style={{
+              margin: '18px 30px 0',
+              padding: '12px 14px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 12,
+              color: '#8b2830',
+              background: '#fff0f0',
+              border: '1px solid #f2cccc',
+              borderLeft: '3px solid #c84752',
+              borderRadius: 6,
+              fontSize: 12,
+            }}
+          >
+            <span>{dashboardError}</span>
+            <button className="table-action" onClick={() => setDashboardRefresh((value) => value + 1)}>
+              Thử lại
+            </button>
+          </div>
+        ) : null}
         {content}
         <footer>
           {loading

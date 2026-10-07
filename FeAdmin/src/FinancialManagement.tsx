@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import './order.css'
+import { PaginationControls, usePaginatedRows } from './PaginationControls'
 
 type RecordRow = Record<string, unknown>
 const API = import.meta.env.VITE_API_URL || 'http://localhost:7000'
@@ -55,6 +56,7 @@ export default function FinancialManagement({ mode }: { mode: 'payments' | 'invo
   }
 
   const filtered = rows.filter((row) => JSON.stringify(row).toLowerCase().includes(query.toLowerCase()))
+  const pagination = usePaginatedRows(filtered, `${mode}:${query}`)
   const title = mode === 'payments' ? 'Quản lý thanh toán' : 'Quản lý hóa đơn'
   return (
     <section className="order-page">
@@ -78,7 +80,7 @@ export default function FinancialManagement({ mode }: { mode: 'payments' | 'invo
             <tr>{mode === 'payments' ? <><th>Mã thanh toán</th><th>Mã đơn</th><th>Mã giao dịch</th><th>Phương thức</th><th>Số tiền</th><th>Trạng thái</th><th>Thời gian</th><th>Thao tác</th></> : <><th>Mã hóa đơn</th><th>Số hóa đơn</th><th>Mã đơn</th><th>Tổng tiền</th><th>Ngày lập</th><th>Người lập</th></>}</tr>
           </thead>
           <tbody>
-            {filtered.map((row, index) => mode === 'payments' ? (
+            {pagination.pageRows.map((row, index) => mode === 'payments' ? (
               <tr key={String(row.MaThanhToan || index)}>
                 <td>#{String(row.MaThanhToan || '-')}</td>
                 <td>#{String(row.MaDonHang || '-')}</td>
@@ -103,6 +105,7 @@ export default function FinancialManagement({ mode }: { mode: 'payments' | 'invo
             ))}
           </tbody>
         </table>
+        <PaginationControls {...pagination} onPageChange={pagination.setPage} />
       </div>
     </section>
   )

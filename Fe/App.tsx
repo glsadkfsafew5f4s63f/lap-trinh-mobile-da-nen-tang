@@ -6,7 +6,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { ActivityIndicator, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useEffect, useState } from 'react';
 
@@ -20,6 +20,7 @@ import AccountInfoScreen from './screens/AccountInfoScreen';
 import AddressScreen from './screens/AddressScreen';
 import CartScreen from './screens/CartScreen';
 import CategoryScreen from './screens/CategoryScreen';
+import ContactScreen from './screens/ContactScreen';
 import CheckoutScreen from './screens/CheckoutScreen';
 import HomeScreen from './screens/HomeScreen';
 import LoginScreen from './screens/LoginScreen';
@@ -102,12 +103,20 @@ function MainTabs() {
 
 export default function App() {
   const [catalogReady, setCatalogReady] = useState(false);
+  const [catalogError, setCatalogError] = useState(false);
 
   useEffect(() => {
     loadProductsFromApi()
-      .catch((error) => console.warn('Không thể tải catalog từ backend; danh sách sản phẩm sẽ trống.', error))
+      .then(() => setCatalogError(false))
+      .catch(() => setCatalogError(true))
       .finally(() => setCatalogReady(true));
   }, []);
+
+  function retryCatalog() {
+    void loadProductsFromApi()
+      .then(() => setCatalogError(false))
+      .catch(() => setCatalogError(true));
+  }
 
   if (!catalogReady) {
     return (
@@ -124,10 +133,21 @@ export default function App() {
           <CartProvider>
             <ReviewProvider>
             <OrderProvider>
-              <NavigationContainer>
-                <StatusBar style="dark" />
-                <AuthenticatedNavigator />
-              </NavigationContainer>
+              <View style={styles.app}>
+                {catalogError ? (
+                  <View style={styles.catalogNotice}>
+                    <Text style={styles.catalogText}>Không kết nối được máy chủ sản phẩm. Kiểm tra Wi-Fi, địa chỉ API và firewall cổng 7000.</Text>
+                    <Pressable onPress={retryCatalog} accessibilityRole="button" style={styles.retry}>
+                      <Ionicons name="refresh" size={16} color={colors.ink} />
+                      <Text style={styles.retryText}>Thử lại</Text>
+                    </Pressable>
+                  </View>
+                ) : null}
+                <NavigationContainer>
+                  <StatusBar style="dark" />
+                  <AuthenticatedNavigator />
+                </NavigationContainer>
+              </View>
             </OrderProvider>
             </ReviewProvider>
           </CartProvider>
@@ -136,6 +156,23 @@ export default function App() {
     </GestureHandlerRootView>
   );
 }
+
+const styles = StyleSheet.create({
+  app: { flex: 1 },
+  catalogNotice: {
+    backgroundColor: '#FFF2D5',
+    borderBottomColor: '#E7C77D',
+    borderBottomWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  catalogText: { color: colors.ink, flex: 1, fontSize: 12, lineHeight: 17 },
+  retry: { flexDirection: 'row', alignItems: 'center', gap: 4, padding: 4 },
+  retryText: { color: colors.ink, fontSize: 12, fontWeight: '700' },
+});
 
 function AuthenticatedNavigator() {
   const { user, isReady } = useAuth();
@@ -170,6 +207,7 @@ function AuthenticatedNavigator() {
           <Stack.Screen name="OrderList" component={OrderListScreen} options={{ title: 'Đơn hàng' }} />
           <Stack.Screen name="OrderDetail" component={OrderDetailScreen} options={{ title: 'Chi tiết đơn hàng' }} />
           <Stack.Screen name="ProductReview" component={ProductReviewScreen} options={{ title: 'Đánh giá sản phẩm' }} />
+          <Stack.Screen name="Contact" component={ContactScreen} options={{ title: 'Liên hệ hỗ trợ' }} />
         </>
       ) : (
         <>
@@ -178,6 +216,7 @@ function AuthenticatedNavigator() {
           <Stack.Screen name="ProductDetail" component={ProductDetailScreen} options={{ title: 'Chi tiết sản phẩm' }} />
           <Stack.Screen name="Login" component={LoginScreen} options={{ title: 'Đăng nhập' }} />
           <Stack.Screen name="Register" component={RegisterScreen} options={{ title: 'Đăng ký' }} />
+          <Stack.Screen name="Contact" component={ContactScreen} options={{ title: 'Liên hệ hỗ trợ' }} />
         </>
       )}
     </Stack.Navigator>

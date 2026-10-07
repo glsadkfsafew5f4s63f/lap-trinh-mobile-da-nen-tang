@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import "./promotion.css";
+import { PaginationControls, usePaginatedRows } from "./PaginationControls";
 
 type CatalogProduct = { MaSanPham: number; TenSanPham: string };
 type CatalogVariant = { MaBienThe: number; SKU: string };
@@ -236,6 +237,7 @@ function VoucherScreen() {
         .toLowerCase()
         .includes(query.toLowerCase()),
   );
+        const pagination = usePaginatedRows(filtered, `${filter}:${query}`);
   const toggleStatus = async (row: Voucher) => {
     const response = await fetch(`${API}/api/admin/vouchers/${row.MaGiamGia}`, {
       method: "PUT",
@@ -293,7 +295,7 @@ function VoucherScreen() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((row) => (
+            {pagination.pageRows.map((row) => (
               <tr key={row.MaGiamGia}>
                 <td>
                   <strong className="code">{row.MaCode}</strong>
@@ -349,6 +351,7 @@ function VoucherScreen() {
             ))}
           </tbody>
         </table>
+        <PaginationControls {...pagination} onPageChange={pagination.setPage} />
         {filtered.length === 0 && (
           <div className="empty-state">Không có mã giảm giá phù hợp.</div>
         )}
@@ -389,6 +392,7 @@ function ProgramScreen({ flash }: { flash: boolean }) {
       (!flash || row.TenChuongTrinh.toLowerCase().includes("flash")) &&
       row.TenChuongTrinh.toLowerCase().includes(query.toLowerCase()),
   );
+  const pagination = usePaginatedRows(filtered, `${filter}:${flash}:${query}`);
   const toggleStatus = async (row: Program) => {
     const response = await fetch(
       `${API}/api/admin/discount-programs/${row.MaChuongTrinh}`,
@@ -459,7 +463,7 @@ function ProgramScreen({ flash }: { flash: boolean }) {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((row) => (
+            {pagination.pageRows.map((row) => (
               <tr key={row.MaChuongTrinh}>
                 <td>
                   <strong>{row.TenChuongTrinh}</strong>
@@ -502,6 +506,7 @@ function ProgramScreen({ flash }: { flash: boolean }) {
             ))}
           </tbody>
         </table>
+        <PaginationControls {...pagination} onPageChange={pagination.setPage} />
         {filtered.length === 0 && (
           <div className="empty-state">Không có chương trình phù hợp.</div>
         )}

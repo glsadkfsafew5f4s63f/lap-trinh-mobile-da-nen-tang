@@ -28,6 +28,8 @@ export default function ProfileScreen({ navigation }: Props) {
         <AppButton label="ĐĂNG NHẬP" onPress={() => navigation.navigate('Login')} />
         <View style={{ height: 10 }} />
         <AppButton label="TẠO TÀI KHOẢN" variant="outline" onPress={() => navigation.navigate('Register')} />
+        <View style={{ height: 10 }} />
+        <AppButton label="LIÊN HỆ HỖ TRỢ" variant="soft" onPress={() => navigation.navigate('Contact')} />
       </View>
     );
   }
@@ -56,6 +58,11 @@ export default function ProfileScreen({ navigation }: Props) {
           icon="receipt-outline"
           title="Đơn hàng của tôi"
           onPress={() => navigation.navigate('OrderList')}
+        />
+        <MenuRow
+          icon="chatbubble-ellipses-outline"
+          title="Liên hệ hỗ trợ"
+          onPress={() => navigation.navigate('Contact')}
         />
       </View>
 

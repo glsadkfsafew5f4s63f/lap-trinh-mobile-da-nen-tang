@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import "./system.css";
+import { PaginationControls, usePaginatedRows } from "./PaginationControls";
 
 type AdminUser = {
   MaNguoiDung: number;
@@ -77,6 +78,7 @@ function AdminUserScreen() {
         .toLowerCase()
         .includes(query.toLowerCase()),
   );
+        const pagination = usePaginatedRows(filtered, `${filter}:${query}`);
   const update = async (row: AdminUser) => {
     const next = row.TrangThai === "HOAT_DONG" ? "KHOA" : "HOAT_DONG";
     const response = await fetch(
@@ -247,7 +249,7 @@ function AdminUserScreen() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((row) => (
+            {pagination.pageRows.map((row) => (
               <tr key={row.MaNguoiDung}>
                 <td>
                   <strong>{row.HoTen}</strong>
@@ -292,6 +294,7 @@ function AdminUserScreen() {
             ))}
           </tbody>
         </table>
+        <PaginationControls {...pagination} onPageChange={pagination.setPage} />
       </TableBox>
       {assigning && (
         <div className="modal-backdrop">
@@ -437,6 +440,7 @@ function RoleScreen() {
       .toLowerCase()
       .includes(query.toLowerCase()),
   );
+  const pagination = usePaginatedRows(filtered, query);
   const toggleStatus = async (row: Role) => {
     const next = row.TrangThai ? 0 : 1;
     const response = await fetch(`${API}/api/vaitro/${row.MaVaiTro}`, {
@@ -516,7 +520,7 @@ function RoleScreen() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((row) => (
+            {pagination.pageRows.map((row) => (
               <tr key={row.MaVaiTro}>
                 <td>
                   <strong className="role-name">{row.TenVaiTro}</strong>
@@ -546,6 +550,7 @@ function RoleScreen() {
             ))}
           </tbody>
         </table>
+        <PaginationControls {...pagination} onPageChange={pagination.setPage} />
       </TableBox>
     </SystemShell>
   );

@@ -131,3 +131,6 @@ export function removeCartItemApi(itemId: number) { return request(`/api/cart/it
 
 export function getApiReviews(productId: number) { return request<ApiReview[]>(`/api/reviews/product/${productId}`) }
 export function createApiReview(payload: { userId: number; productId: number; orderId: number; detailId: number; stars: number; comment: string }) { return request('/api/reviews', { method: 'POST', body: JSON.stringify({ MaSanPham: payload.productId, MaDonHang: payload.orderId, MaChiTietDonHang: payload.detailId, SoSao: payload.stars, NoiDung: payload.comment }) }) }
+export function createContactApi(payload: { HoTen: string; Email?: string; SoDienThoai?: string; ChuDe?: string; NoiDung: string }) {
+  return request<{ MaLienHe: number; TrangThai: string }>('/api/contact', { method: 'POST', body: JSON.stringify(payload) })
+}

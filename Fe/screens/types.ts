@@ -19,4 +19,5 @@ export type RootStackParamList = {
   OrderList: undefined;
   OrderDetail: { orderId: string };
   ProductReview: { orderId: string; productId: string };
+  Contact: undefined;
 };

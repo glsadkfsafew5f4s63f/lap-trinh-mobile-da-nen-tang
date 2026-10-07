@@ -4,6 +4,7 @@ import "./product.css";
 import "./gallery.css";
 import CatalogAdminScreen from "./CatalogAdminScreen";
 import { ImageAdminScreen, VariantAdminScreen } from "./ProductResourceScreens";
+import { PaginationControls, usePaginatedRows } from "./PaginationControls";
 
 type Product = Record<string, any>;
 type CatalogType = "categories" | "brands" | "colors" | "sizes";
@@ -64,6 +65,7 @@ function ProductList() {
       (!gender || row.GioiTinh === gender) &&
       (!featuredOnly || Number(row.NoiBat) === 1),
   );
+  const pagination = usePaginatedRows(filtered, `${query}:${categoryId}:${brandId}:${status}:${gender}:${featuredOnly}`);
   return (
     <Shell
       eyebrow="SẢN PHẨM / DANH SÁCH SẢN PHẨM"
@@ -167,7 +169,7 @@ function ProductList() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((row) => (
+            {pagination.pageRows.map((row) => (
               <tr key={String(row.MaSanPham)}>
                 <td>
                   {row.AnhChinh ? (
@@ -205,6 +207,7 @@ function ProductList() {
             ))}
           </tbody>
         </table>
+        <PaginationControls {...pagination} onPageChange={pagination.setPage} />
       </div>
       {showForm && (
         <ProductForm

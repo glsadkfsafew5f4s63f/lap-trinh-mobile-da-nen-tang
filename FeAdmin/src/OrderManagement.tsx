@@ -1,13 +1,51 @@
-import { useEffect, useState } from 'react'
-import type { ReactNode } from 'react'
-import './order.css'
+import { useEffect, useState } from 'react';
+import type { ReactNode } from 'react';
+import './order.css';
+import { PaginationControls, usePaginatedRows } from './PaginationControls';
 
-type Order = { MaDonHang: number; MaDonHangCode: string; HoTen?: string; Email?: string; TenNguoiNhan: string; SoDienThoaiNhan: string; DiaChiGiaoHang: string; TongTien: number; GiamGia: number; PhiGiaoHang: number; ThanhTien: number; TrangThaiThanhToan: string; TrangThaiDonHang: string; NgayDat: string; NgayCapNhat?: string; GhiChu?: string; items?: Item[]; payments?: Payment[]; history?: History[] }
-type Item = { MaChiTietDonHang: number; TenSanPham: string; SKU?: string; MauSac?: string; KichThuoc?: string; SoLuong: number; DonGia: number; ThanhTien: number }
-type Payment = { MaThanhToan: number; PhuongThuc: string; LanThu: number; SoTien: number; NgayTao: string }
-type History = { MaLichSu: number; TrangThaiMoi: string; HoTen?: string; GhiChu?: string; ThoiGian: string }
-const API = import.meta.env.VITE_API_URL || 'http://localhost:7000'
-const statusNames: Record<string, string> = { CHO_XAC_NHAN: 'Chờ xác nhận', DA_XAC_NHAN: 'Đã xác nhận', DANG_CHUAN_BI: 'Đang chuẩn bị', DANG_GIAO: 'Đang giao', DA_GIAO: 'Đã giao', DA_HUY: 'Đã hủy', DA_HOAN_TIEN: 'Đã hoàn tiền' }
+type Order = {
+  MaDonHang: number;
+  MaDonHangCode: string;
+  HoTen?: string;
+  Email?: string;
+  TenNguoiNhan: string;
+  SoDienThoaiNhan: string;
+  DiaChiGiaoHang: string;
+  TongTien: number;
+  GiamGia: number;
+  PhiGiaoHang: number;
+  ThanhTien: number;
+  TrangThaiThanhToan: string;
+  TrangThaiDonHang: string;
+  NgayDat: string;
+  NgayCapNhat?: string;
+  GhiChu?: string;
+  items?: Item[];
+  payments?: Payment[];
+  history?: History[];
+};
+type Item = {
+  MaChiTietDonHang: number;
+  TenSanPham: string;
+  SKU?: string;
+  MauSac?: string;
+  KichThuoc?: string;
+  SoLuong: number;
+  DonGia: number;
+  ThanhTien: number;
+};
+type Payment = { MaThanhToan: number; PhuongThuc: string; LanThu: number; SoTien: number; NgayTao: string };
+type History = { MaLichSu: number; TrangThaiMoi: string; HoTen?: string; GhiChu?: string; ThoiGian: string };
+const API = import.meta.env.VITE_API_URL || 'http://localhost:7000';
+const statusNames: Record<string, string> = {
+  CHO_XAC_NHAN: 'Chờ xác nhận',
+  DA_XAC_NHAN: 'Đã xác nhận',
+  DANG_CHUAN_BI: 'Đang chuẩn bị',
+  DANG_GIAO: 'Đang giao',
+  DA_GIAO: 'Đã giao',
+  DA_HUY: 'Đã hủy',
+  DA_HOAN_TIEN: 'Đã hoàn tiền',
+};
 const allowedTransitions: Record<string, string[]> = {
   CHO_XAC_NHAN: ['DA_XAC_NHAN', 'DA_HUY'],
   DA_XAC_NHAN: ['DANG_CHUAN_BI', 'DA_HUY'],
@@ -16,21 +54,215 @@ const allowedTransitions: Record<string, string[]> = {
   DA_GIAO: [],
   DA_HUY: [],
   DA_HOAN_TIEN: [],
-}
-const paymentNames: Record<string, string> = { CHUA_THANH_TOAN: 'Chưa thanh toán', DA_THANH_TOAN: 'Đã thanh toán', HOAN_TIEN: 'Hoàn tiền', CHO_XU_LY: 'Chờ xử lý', THANH_CONG: 'Thành công', THAT_BAI: 'Thất bại' }
-const money = (value: number) => `${Number(value || 0).toLocaleString('vi-VN')} đ`
-const date = (value?: string) => value ? new Date(value).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-'
-const headers = () => ({ 'Content-Type': 'application/json', ...(localStorage.getItem('admin_token') ? { Authorization: `Bearer ${localStorage.getItem('admin_token')}` } : {}) })
+};
+const paymentNames: Record<string, string> = {
+  CHUA_THANH_TOAN: 'Chưa thanh toán',
+  DA_THANH_TOAN: 'Đã thanh toán',
+  HOAN_TIEN: 'Hoàn tiền',
+  CHO_XU_LY: 'Chờ xử lý',
+  THANH_CONG: 'Thành công',
+  THAT_BAI: 'Thất bại',
+};
+const money = (value: number) => `${Number(value || 0).toLocaleString('vi-VN')} đ`;
+const date = (value?: string) =>
+  value
+    ? new Date(value).toLocaleString('vi-VN', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    : '-';
+const headers = () => ({
+  'Content-Type': 'application/json',
+  ...(localStorage.getItem('admin_token')
+    ? { Authorization: `Bearer ${localStorage.getItem('admin_token')}` }
+    : {}),
+});
 
 export default function OrderManagement({ mode }: { mode: string }) {
-  const [orders, setOrders] = useState<Order[]>([]); const [selected, setSelected] = useState<Order | null>(null); const [query, setQuery] = useState(''); const [status, setStatus] = useState('ALL'); const [loading, setLoading] = useState(false)
-  const load = async () => { setLoading(true); try { const response = await fetch(`${API}/api/admin/orders`, { headers: headers() }); if (response.ok) { const body = await response.json(); if (Array.isArray(body.data)) setOrders(body.data) } } catch { /* Demo data keeps the screen usable without the API. */ } finally { setLoading(false) } }
-  useEffect(() => { void load() }, [])
-  if (selected) return <OrderDetail order={selected} onBack={() => setSelected(null)} onChanged={async () => { setSelected(null); await load() }} />
-  const filtered = orders.filter((order) => (mode !== 'history' || ['DA_GIAO', 'DA_HUY', 'DA_HOAN_TIEN'].includes(order.TrangThaiDonHang)) && (mode !== 'payments' || order.TrangThaiThanhToan !== 'CHUA_THANH_TOAN') && (mode !== 'invoices' || order.TrangThaiDonHang === 'DA_GIAO') && (status === 'ALL' || order.TrangThaiDonHang === status) && `${order.MaDonHangCode} ${order.HoTen || ''} ${order.TenNguoiNhan}`.toLowerCase().includes(query.toLowerCase()))
-  const revenue = orders.filter((order) => order.TrangThaiDonHang === 'DA_GIAO' && order.TrangThaiThanhToan === 'DA_THANH_TOAN').reduce((sum, order) => sum + Number(order.ThanhTien || 0), 0)
-  const title = mode === 'history' ? 'Lịch sử đơn hàng' : mode === 'payments' ? 'Theo dõi thanh toán' : mode === 'invoices' ? 'Hóa đơn đơn hàng' : 'Quản lý đơn hàng'
-  return <section className="order-page"><div className="order-heading"><div><small>ĐƠN HÀNG / {title.toUpperCase()}</small><h1>{title}</h1><p> theo dõi quy trình xử lý, tiến độ vận chuyển và thanh toán đơn hàng toàn kênh.</p></div><button className="primary-action">⇩ Xuất dữ liệu</button></div><div className="order-metrics"><Metric title="Tổng đơn hôm nay" value={orders.length} note="đơn phát sinh" tone="blue" /><Metric title="Chờ xác nhận" value={orders.filter((item) => item.TrangThaiDonHang === 'CHO_XAC_NHAN').length} note="cần xử lý" tone="orange" /><Metric title="Đang giao hàng" value={orders.filter((item) => item.TrangThaiDonHang === 'DANG_GIAO').length} note="đơn vận chuyển" tone="violet" /><Metric title="Doanh thu hiển thị" value={money(revenue)} note="đơn đã giao, đã thanh toán" tone="green" /></div><div className="order-tabs">{[['ALL', 'Tất cả'], ['CHO_XAC_NHAN', 'Chờ xác nhận'], ['DA_XAC_NHAN', 'Đã xác nhận'], ['DANG_CHUAN_BI', 'Đang chuẩn bị'], ['DANG_GIAO', 'Đang giao'], ['DA_GIAO', 'Đã giao'], ['DA_HUY', 'Đã hủy']].map(([key, label]) => <button className={status === key ? 'selected' : ''} key={key} onClick={() => setStatus(key)}>{label}<b>{key === 'ALL' ? orders.length : orders.filter((item) => item.TrangThaiDonHang === key).length}</b></button>)}</div><div className="order-filters"><label>⌕ <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Tìm mã đơn hoặc tên khách hàng..." /></label><select value={status} onChange={(event) => setStatus(event.target.value)}><option value="ALL">Tất cả trạng thái</option>{Object.entries(statusNames).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select><button>Ngày đặt ▾</button><button>⋮ Bộ lọc nâng cao</button></div><div className="order-table-card"><div className="table-caption"><strong>{filtered.length} đơn hàng</strong><span>{loading ? 'Đang đồng bộ...' : 'Cập nhật từ DonHang'}</span></div><table className="order-table"><thead><tr><th>Mã đơn & ngày đặt</th><th>Khách hàng</th><th>Tổng tiền</th><th>Thanh toán</th><th>Trạng thái</th><th>Thao tác</th></tr></thead><tbody>{filtered.map((order) => <tr key={order.MaDonHang}><td><button className="order-link" onClick={() => setSelected(order)}><b>#{order.MaDonHangCode}</b><small>{date(order.NgayDat)}</small></button></td><td><strong>{order.HoTen || order.TenNguoiNhan}</strong><small>{order.Email || order.SoDienThoaiNhan}</small></td><td><strong>{money(order.ThanhTien)}</strong><small>Giá trị: {money(order.TongTien)}</small></td><td><span className={`payment-pill ${order.TrangThaiThanhToan}`}>{paymentNames[order.TrangThaiThanhToan] || order.TrangThaiThanhToan}</span></td><td><span className={`status-pill ${order.TrangThaiDonHang}`}>{statusNames[order.TrangThaiDonHang] || order.TrangThaiDonHang}</span></td><td><button className="row-action" onClick={() => setSelected(order)}>Xem chi tiết</button></td></tr>)}</tbody></table>{filtered.length === 0 && <div className="empty-state">Không có đơn hàng phù hợp.</div>}</div></section>
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [selected, setSelected] = useState<Order | null>(null);
+  const [query, setQuery] = useState('');
+  const [status, setStatus] = useState('ALL');
+  const [loading, setLoading] = useState(false);
+  const load = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch(`${API}/api/admin/orders`, { headers: headers() });
+      if (response.ok) {
+        const body = await response.json();
+        if (Array.isArray(body.data)) setOrders(body.data);
+      }
+    } catch {
+      /* Demo data keeps the screen usable without the API. */
+    } finally {
+      setLoading(false);
+    }
+  };
+  useEffect(() => {
+    void load();
+  }, []);
+  const filtered = orders.filter(
+    (order) =>
+      (mode !== 'history' || ['DA_GIAO', 'DA_HUY', 'DA_HOAN_TIEN'].includes(order.TrangThaiDonHang)) &&
+      (mode !== 'payments' || order.TrangThaiThanhToan !== 'CHUA_THANH_TOAN') &&
+      (mode !== 'invoices' || order.TrangThaiDonHang === 'DA_GIAO') &&
+      (status === 'ALL' || order.TrangThaiDonHang === status) &&
+      `${order.MaDonHangCode} ${order.HoTen || ''} ${order.TenNguoiNhan}`
+        .toLowerCase()
+        .includes(query.toLowerCase())
+  );
+  const pagination = usePaginatedRows(filtered, `${mode}:${status}:${query}`);
+  if (selected)
+    return (
+      <OrderDetail
+        order={selected}
+        onBack={() => setSelected(null)}
+        onChanged={async () => {
+          setSelected(null);
+          await load();
+        }}
+      />
+    );
+  const revenue = orders
+    .filter((order) => order.TrangThaiDonHang === 'DA_GIAO' && order.TrangThaiThanhToan === 'DA_THANH_TOAN')
+    .reduce((sum, order) => sum + Number(order.ThanhTien || 0), 0);
+  const title =
+    mode === 'history'
+      ? 'Lịch sử đơn hàng'
+      : mode === 'payments'
+        ? 'Theo dõi thanh toán'
+        : mode === 'invoices'
+          ? 'Hóa đơn đơn hàng'
+          : 'Quản lý đơn hàng';
+  return (
+    <section className="order-page">
+      <div className="order-heading">
+        <div>
+          <small>ĐƠN HÀNG / {title.toUpperCase()}</small>
+          <h1>{title}</h1>
+          <p> theo dõi quy trình xử lý, tiến độ vận chuyển và thanh toán đơn hàng toàn kênh.</p>
+        </div>
+        <button className="primary-action">⇩ Xuất dữ liệu</button>
+      </div>
+      <div className="order-metrics">
+        <Metric title="Tổng đơn hôm nay" value={orders.length} note="đơn phát sinh" tone="blue" />
+        <Metric
+          title="Chờ xác nhận"
+          value={orders.filter((item) => item.TrangThaiDonHang === 'CHO_XAC_NHAN').length}
+          note="cần xử lý"
+          tone="orange"
+        />
+        <Metric
+          title="Đang giao hàng"
+          value={orders.filter((item) => item.TrangThaiDonHang === 'DANG_GIAO').length}
+          note="đơn vận chuyển"
+          tone="violet"
+        />
+        <Metric
+          title="Doanh thu hiển thị"
+          value={money(revenue)}
+          note="đơn đã giao, đã thanh toán"
+          tone="green"
+        />
+      </div>
+      <div className="order-tabs">
+        {[
+          ['ALL', 'Tất cả'],
+          ['CHO_XAC_NHAN', 'Chờ xác nhận'],
+          ['DA_XAC_NHAN', 'Đã xác nhận'],
+          ['DANG_CHUAN_BI', 'Đang chuẩn bị'],
+          ['DANG_GIAO', 'Đang giao'],
+          ['DA_GIAO', 'Đã giao'],
+          ['DA_HUY', 'Đã hủy'],
+        ].map(([key, label]) => (
+          <button className={status === key ? 'selected' : ''} key={key} onClick={() => setStatus(key)}>
+            {label}
+            <b>
+              {key === 'ALL' ? orders.length : orders.filter((item) => item.TrangThaiDonHang === key).length}
+            </b>
+          </button>
+        ))}
+      </div>
+      <div className="order-filters">
+        <label>
+          ⌕{' '}
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Tìm mã đơn hoặc tên khách hàng..."
+          />
+        </label>
+        <select value={status} onChange={(event) => setStatus(event.target.value)}>
+          <option value="ALL">Tất cả trạng thái</option>
+          {Object.entries(statusNames).map(([key, label]) => (
+            <option key={key} value={key}>
+              {label}
+            </option>
+          ))}
+        </select>
+        <button>Ngày đặt ▾</button>
+        <button>⋮ Bộ lọc nâng cao</button>
+      </div>
+      <div className="order-table-card">
+        <div className="table-caption">
+          <strong>{filtered.length} đơn hàng</strong>
+          <span>{loading ? 'Đang đồng bộ...' : 'Cập nhật từ DonHang'}</span>
+        </div>
+        <table className="order-table">
+          <thead>
+            <tr>
+              <th>Mã đơn & ngày đặt</th>
+              <th>Khách hàng</th>
+              <th>Tổng tiền</th>
+              <th>Thanh toán</th>
+              <th>Trạng thái</th>
+              <th>Thao tác</th>
+            </tr>
+          </thead>
+          <tbody>
+            {pagination.pageRows.map((order) => (
+              <tr key={order.MaDonHang}>
+                <td>
+                  <button className="order-link" onClick={() => setSelected(order)}>
+                    <b>#{order.MaDonHangCode}</b>
+                    <small>{date(order.NgayDat)}</small>
+                  </button>
+                </td>
+                <td>
+                  <strong>{order.HoTen || order.TenNguoiNhan}</strong>
+                  <small>{order.Email || order.SoDienThoaiNhan}</small>
+                </td>
+                <td>
+                  <strong>{money(order.ThanhTien)}</strong>
+                  <small>Giá trị: {money(order.TongTien)}</small>
+                </td>
+                <td>
+                  <span className={`payment-pill ${order.TrangThaiThanhToan}`}>
+                    {paymentNames[order.TrangThaiThanhToan] || order.TrangThaiThanhToan}
+                  </span>
+                </td>
+                <td>
+                  <span className={`status-pill ${order.TrangThaiDonHang}`}>
+                    {statusNames[order.TrangThaiDonHang] || order.TrangThaiDonHang}
+                  </span>
+                </td>
+                <td>
+                  <button className="row-action" onClick={() => setSelected(order)}>
+                    Xem chi tiết
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <PaginationControls {...pagination} onPageChange={pagination.setPage} />
+        {filtered.length === 0 && <div className="empty-state">Không có đơn hàng phù hợp.</div>}
+      </div>
+    </section>
+  );
 }
 
 function OrderDetail({
@@ -57,36 +289,24 @@ function OrderDetail({
   const update = async (next: string) => {
     setUpdating(true);
     try {
-      const response = await fetch(
-        `${API}/api/admin/orders/${order.MaDonHang}/status`,
-        {
-          method: "PUT",
-          headers: headers(),
-          body: JSON.stringify({ TrangThaiDonHang: next }),
-        },
-      );
+      const response = await fetch(`${API}/api/admin/orders/${order.MaDonHang}/status`, {
+        method: 'PUT',
+        headers: headers(),
+        body: JSON.stringify({ TrangThaiDonHang: next }),
+      });
       const body = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(body?.message || "Không thể cập nhật trạng thái đơn hàng.");
+      if (!response.ok) throw new Error(body?.message || 'Không thể cập nhật trạng thái đơn hàng.');
       setOrder({ ...order, TrangThaiDonHang: next });
       await onChanged();
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : "Không thể cập nhật trạng thái đơn hàng.");
+      window.alert(error instanceof Error ? error.message : 'Không thể cập nhật trạng thái đơn hàng.');
     } finally {
       setUpdating(false);
     }
   };
-  const steps = [
-    "CHO_XAC_NHAN",
-    "DA_XAC_NHAN",
-    "DANG_CHUAN_BI",
-    "DANG_GIAO",
-    "DA_GIAO",
-  ];
+  const steps = ['CHO_XAC_NHAN', 'DA_XAC_NHAN', 'DANG_CHUAN_BI', 'DANG_GIAO', 'DA_GIAO'];
   const current = steps.indexOf(order.TrangThaiDonHang);
-  const statusOptions = [
-    order.TrangThaiDonHang,
-    ...(allowedTransitions[order.TrangThaiDonHang] || []),
-  ];
+  const statusOptions = [order.TrangThaiDonHang, ...(allowedTransitions[order.TrangThaiDonHang] || [])];
   return (
     <section className="order-page detail-page">
       <button className="back-link" onClick={onBack}>
@@ -96,14 +316,13 @@ function OrderDetail({
         <div>
           <small>CHI TIẾT ĐƠN HÀNG</small>
           <h1>
-            Đơn hàng #{order.MaDonHangCode}{" "}
+            Đơn hàng #{order.MaDonHangCode}{' '}
             <span className={`status-pill ${order.TrangThaiDonHang}`}>
               {statusNames[order.TrangThaiDonHang]}
             </span>
           </h1>
           <p>
-            Đặt ngày {date(order.NgayDat)} · Cập nhật lần cuối{" "}
-            {date(order.NgayCapNhat)}
+            Đặt ngày {date(order.NgayDat)} · Cập nhật lần cuối {date(order.NgayCapNhat)}
           </p>
         </div>
         <div className="detail-actions">
@@ -126,13 +345,8 @@ function OrderDetail({
       <div className="progress-panel">
         <div className="progress-line">
           {steps.map((step, index) => (
-            <div
-              className={
-                index <= current ? "progress-step done" : "progress-step"
-              }
-              key={step}
-            >
-              <i>{index < current ? "✓" : index + 1}</i>
+            <div className={index <= current ? 'progress-step done' : 'progress-step'} key={step}>
+              <i>{index < current ? '✓' : index + 1}</i>
               <strong>{statusNames[step]}</strong>
               {index === current && <small>Trạng thái hiện tại</small>}
             </div>
@@ -149,8 +363,7 @@ function OrderDetail({
                   <div>
                     <strong>{item.TenSanPham}</strong>
                     <small>
-                      {item.SKU || "-"} · {item.MauSac || "Không rõ màu"} · Size{" "}
-                      {item.KichThuoc || "-"}
+                      {item.SKU || '-'} · {item.MauSac || 'Không rõ màu'} · Size {item.KichThuoc || '-'}
                     </small>
                   </div>
                   <span>
@@ -181,12 +394,10 @@ function OrderDetail({
                 <div key={item.MaLichSu}>
                   <i>●</i>
                   <div>
-                    <strong>
-                      {statusNames[item.TrangThaiMoi] || item.TrangThaiMoi}
-                    </strong>
+                    <strong>{statusNames[item.TrangThaiMoi] || item.TrangThaiMoi}</strong>
                     <small>
-                      {date(item.ThoiGian)} · {item.HoTen || "Hệ thống"}
-                      {item.GhiChu ? ` · ${item.GhiChu}` : ""}
+                      {date(item.ThoiGian)} · {item.HoTen || 'Hệ thống'}
+                      {item.GhiChu ? ` · ${item.GhiChu}` : ''}
                     </small>
                   </div>
                 </div>
@@ -196,10 +407,8 @@ function OrderDetail({
         </div>
         <aside>
           <Panel title="Khách hàng">
-            <strong className="customer-name">
-              {order.HoTen || order.TenNguoiNhan}
-            </strong>
-            <p>{order.Email || "Chưa có email"}</p>
+            <strong className="customer-name">{order.HoTen || order.TenNguoiNhan}</strong>
+            <p>{order.Email || 'Chưa có email'}</p>
             <p>☎ {order.SoDienThoaiNhan}</p>
             <p>⌖ {order.DiaChiGiaoHang}</p>
           </Panel>
@@ -212,7 +421,7 @@ function OrderDetail({
                 <span>
                   {paymentNames[payment.PhuongThuc] || payment.PhuongThuc}
                   <small>
-                    {" "}
+                    {' '}
                     Lần {payment.LanThu} · {date(payment.NgayTao)}
                   </small>
                 </span>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import "./product.css";
+import { PaginationControls, usePaginatedRows } from "./PaginationControls";
 
 type Row = Record<string, unknown>;
 const API = import.meta.env.VITE_API_URL || "http://localhost:7000";
@@ -55,6 +56,7 @@ export function VariantAdminScreen() {
     }
     return () => { current = false; };
   }, [productId]);
+  const pagination = usePaginatedRows(rows, productId);
   const create = async () => {
     if (!productId || !form.SKU) return;
     const response = await fetch(
@@ -202,7 +204,7 @@ export function VariantAdminScreen() {
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
+            {pagination.pageRows.map((row) => (
               <tr key={String(row.MaBienThe)}>
                 <td><strong>{String(row.SKU)}</strong></td>
                 <td>{String(row.TenMau || "-")}</td>
@@ -214,6 +216,7 @@ export function VariantAdminScreen() {
             ))}
           </tbody>
         </table>
+        <PaginationControls {...pagination} onPageChange={pagination.setPage} />
         {!rows.length && (
           <div className="variant-empty">Chưa có biến thể cho sản phẩm này.</div>
         )}

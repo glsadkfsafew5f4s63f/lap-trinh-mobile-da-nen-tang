@@ -32,6 +32,7 @@ app.use('/api/orders', require('./routes/order.route'));
 app.use('/api/reviews', require('./routes/review.route'));
 app.use('/api/payments', require('./routes/payment.route'));
 app.use('/api/user', require('./routes/user.route'));
+app.use('/api/contact', require('./routes/contact.route'));
 app.use('/api/admin', require('./routes/admin.route'));
 app.use('/api/admin/catalog', ...domainAccess('products'), require('./routes/adminCatalog.route'));
 app.use('/api/vaitro', ...adminOnly, require('./routes/vaitro.route'));

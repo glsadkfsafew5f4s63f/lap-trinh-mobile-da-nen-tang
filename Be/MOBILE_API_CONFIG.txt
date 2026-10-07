@@ -6,8 +6,15 @@ EXPO GO - CẤU HÌNH KẾT NỐI API
 4. Ví dụ máy có IP 192.168.1.10, cấu hình:
    EXPO_PUBLIC_API_URL=http://192.168.1.10:7000
    Không thêm /api vào URL; ứng dụng tự thêm tiền tố này cho từng endpoint.
+   Sau khi đổi .env, khởi động lại Expo để nạp cấu hình mới.
 
-5. Bản phát hành phải cấu hình EXPO_PUBLIC_API_URL thành origin backend HTTPS thực tế.
+5. Mở trình duyệt trên điện thoại và truy cập http://<IPv4-máy-tính>:7000/health.
+   Nếu không mở được, kiểm tra điện thoại và máy tính cùng Wi-Fi, không dùng mạng khách
+   có client isolation, và cho phép TCP cổng 7000 qua Windows Defender Firewall (Private).
+   Có thể tạo rule trong PowerShell chạy bằng quyền Administrator:
+   New-NetFirewallRule -DisplayName "ShopQA API 7000" -Direction Inbound -Protocol TCP -LocalPort 7000 -Action Allow -Profile Private
+
+6. Bản phát hành phải cấu hình EXPO_PUBLIC_API_URL thành origin backend HTTPS thực tế.
    Nếu thiếu biến này, ứng dụng sẽ báo lỗi cấu hình thay vì gọi domain mẫu.
 
 Web Admin chạy trên cùng máy có thể dùng:
@@ -39,6 +46,7 @@ GET  /user/addresses
 POST /user/addresses
 PUT  /user/addresses/:id
 DELETE /user/addresses/:id
+POST /contact
 GET  /admin/dashboard
 GET  /admin/users
 GET  /admin/orders

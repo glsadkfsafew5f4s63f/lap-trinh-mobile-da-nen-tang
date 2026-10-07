@@ -1,5 +1,6 @@
 const db = require('../common/db');
-exports.categories = async (req,res)=>{ try { const [r]=await db.query(`SELECT MaDanhMuc,TenDanhMuc,MoTa,HinhAnh FROM DanhMuc WHERE TrangThai=1 ORDER BY TenDanhMuc`); res.json({success:true,data:r}); } catch(e){res.status(500).json({success:false,message:e.message});} };
+const { toPublicImageUrl } = require('../utils/imagePaths');
+exports.categories = async (req,res)=>{ try { const [r]=await db.query(`SELECT MaDanhMuc,TenDanhMuc,MoTa,HinhAnh FROM DanhMuc WHERE TrangThai=1 ORDER BY TenDanhMuc`); res.json({success:true,data:r.map(row=>({...row,HinhAnh:toPublicImageUrl(row.HinhAnh)}))}); } catch(e){res.status(500).json({success:false,message:e.message});} };
 exports.brands = async (req,res)=>{ try { const [r]=await db.query(`SELECT MaThuongHieu,TenThuongHieu,MoTa,Logo FROM ThuongHieu WHERE TrangThai=1 ORDER BY TenThuongHieu`); res.json({success:true,data:r}); } catch(e){res.status(500).json({success:false,message:e.message});} };
 exports.colors = async (req,res)=>{ try { const [r]=await db.query(`SELECT MaMauSac,TenMau,MaMauHex FROM MauSac WHERE TrangThai=1 ORDER BY TenMau`); res.json({success:true,data:r}); } catch(e){res.status(500).json({success:false,message:e.message});} };
 exports.sizes = async (req,res)=>{ try { const [r]=await db.query(`SELECT MaKichThuoc,TenKichThuoc,MoTa FROM KichThuoc WHERE TrangThai=1 ORDER BY MaKichThuoc`); res.json({success:true,data:r}); } catch(e){res.status(500).json({success:false,message:e.message});} };
