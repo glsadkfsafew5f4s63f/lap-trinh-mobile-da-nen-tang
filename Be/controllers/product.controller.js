@@ -9,7 +9,7 @@ function priceExpr(alias='sp') {
 exports.list=async(req,res)=>{
  try{
   const page=Math.max(Number(req.query.page)||1,1), limit=Math.min(Math.max(Number(req.query.limit)||12,1),100), offset=(page-1)*limit;
-  const where=[`sp.TrangThai='DANG_BAN'`], p=[];
+  const where=[`sp.TrangThai<>'NGUNG_BAN'`], p=[];
   const keyword=(req.query.keyword||'').trim();
   if(keyword){where.push(`(sp.TenSanPham LIKE ? OR sp.MaSanPhamCode LIKE ?)`); const k=`%${keyword}%`; p.push(k,k);}
   if(req.query.categoryId){where.push('sp.MaDanhMuc=?');p.push(req.query.categoryId);}

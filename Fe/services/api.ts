@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import Constants from 'expo-constants'
 
 export type ApiProductImage = { productId?: number; url: string; isPrimary: number; order: number }
-export type ApiProduct = { id: number; name: string; description: string | null; price: number; oldPrice: number | null; isNew: number; isFeatured: number; category: string; brand: string | null; rating: number; reviewCount: number; images: ApiProductImage[] }
+export type ApiProduct = { id: number; name: string; description: string | null; price: number; oldPrice: number | null; isNew: number; isFeatured: number; category: string; brand: string | null; rating: number; reviewCount: number; stock: number; images: ApiProductImage[] }
 export type ApiVariant = { id: number; productId: number; colorId: number; color: string; hex: string | null; sizeId: number; size: string; sku: string; price: number; stock: number }
 export type ApiUser = { id: number; name: string; email: string; phone: string; address: string; roles?: string[] }
 export type OrderApiRecord = { MaDonHang: number; MaDonHangCode: string; TenNguoiNhan?: string; SoDienThoaiNhan?: string; DiaChiGiaoHang?: string; TongTien: number; GiamGia: number; PhiGiaoHang: number; ThanhTien: number; PhuongThuc?: string; TrangThaiThanhToan: string; TrangThaiDonHang: string; NgayDat: string; NgayCapNhat?: string; items?: Array<{ MaChiTietDonHang: number; MaBienThe: number | null; MaSanPham: number | null; TenSanPham?: string; SKU?: string; TenMau?: string; TenKichThuoc?: string; SoLuong: number; DonGia: number; DaDanhGia?: number | boolean }>; payments?: Array<{ MaThanhToan: number; PhuongThuc: string; LanThu: number; SoTien: number; TrangThai: string }> }
@@ -60,6 +60,7 @@ export async function getApiProducts() {
     brand: row.TenThuongHieu ? String(row.TenThuongHieu) : null,
     rating: Number(row.DiemTrungBinh || 0),
     reviewCount: Number(row.SoDanhGia || 0),
+    stock: Number(row.SoLuongCoTheBan || 0),
     images: row.AnhChinh ? [{ url: String(row.AnhChinh), isPrimary: 1, order: 1 }] : [],
   })) as ApiProduct[]
 }

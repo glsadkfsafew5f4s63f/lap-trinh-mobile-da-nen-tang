@@ -34,6 +34,11 @@ export function ProductCard({ product, onPress, horizontal, featured }: Props) {
           contentFit="cover"
         />
         <View style={styles.badges}>
+          {product.stock !== undefined && product.stock <= 0 ? (
+            <View style={[styles.badge, styles.badgeOutOfStock]}>
+              <Text style={styles.badgeText}>HẾT HÀNG</Text>
+            </View>
+          ) : null}
           {product.isNew ? (
             <View style={styles.badge}>
               <Text style={styles.badgeText}>MỚI</Text>
@@ -110,6 +115,9 @@ const styles = StyleSheet.create({
   },
   badgeFeatured: {
     backgroundColor: colors.accent,
+  },
+  badgeOutOfStock: {
+    backgroundColor: '#B42332',
   },
   badgeText: {
     color: '#fff',

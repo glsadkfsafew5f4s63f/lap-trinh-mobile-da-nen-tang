@@ -40,6 +40,10 @@ COD chỉ chuyển sang đã thanh toán khi nhân viên tài chính xác nhận
 
 Middleware xác thực trạng thái tài khoản và các role đang hoạt động trong database ở mỗi request; khóa người dùng hoặc gỡ role có hiệu lực ngay cả với JWT đã phát hành trước đó.
 
+Sau khi cập nhật database hiện có, chạy `migrations/20261003_moving_average_purchase_cost.sql` để chuyển giá nhập SKU sang giá bình quân tức thời khi duyệt phiếu. Mỗi SKU chỉ được có một dòng trên phiếu nhập; biểu mẫu có thể thêm toàn bộ SKU của sản phẩm và áp dụng giá nhập tham chiếu. Giá bán thấp hơn giá nhập vẫn được phép nhưng có cảnh báo trong quản trị giá và gắn khuyến mãi.
+
+Màn tồn kho và tổng quan cảnh báo SKU còn lượng tồn được ghi nhận từ hơn một năm trước để nhân viên kiểm kê. Tuổi tồn được ước tính theo FIFO từ lịch sử biến động tồn kho; số tồn ban đầu không có lịch sử nhập/xuất sẽ không được gán tuổi giả định. Cảnh báo chỉ yêu cầu kiểm tra, không tự điều chỉnh hoặc hủy tồn.
+
 ## API mặc định
 
 | Method | URL | Chức năng |

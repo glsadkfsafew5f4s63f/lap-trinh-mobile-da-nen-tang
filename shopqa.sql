@@ -750,13 +750,18 @@ BEGIN
     DECLARE done INT DEFAULT 0;
     DECLARE vMaBienThe INT UNSIGNED;
     DECLARE vSoLuong INT UNSIGNED;
+    DECLARE vDonGiaNhap DECIMAL(15,2);
     DECLARE vTonTruoc INT UNSIGNED;
     DECLARE vTonSau INT UNSIGNED;
+    DECLARE vGiaNhapCu DECIMAL(15,2);
+    DECLARE vGiaNhapMoi DECIMAL(15,2);
 
     DECLARE cur CURSOR FOR
-        SELECT MaBienThe, SoLuong
+        SELECT MaBienThe, SUM(SoLuong),
+               SUM(SoLuong * DonGia) / NULLIF(SUM(SoLuong), 0)
         FROM ChiTietPhieuNhap
-        WHERE MaPhieuNhap = NEW.MaPhieuNhap;
+        WHERE MaPhieuNhap = NEW.MaPhieuNhap
+        GROUP BY MaBienThe;
 
     DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = 1;
 
@@ -766,25 +771,26 @@ BEGIN
 
         OPEN cur;
         read_loop: LOOP
-            FETCH cur INTO vMaBienThe, vSoLuong;
+            FETCH cur INTO vMaBienThe, vSoLuong, vDonGiaNhap;
             IF done = 1 THEN
                 LEAVE read_loop;
             END IF;
 
-            SELECT SoLuongTon
-            INTO vTonTruoc
+            SELECT SoLuongTon, GiaNhap
+            INTO vTonTruoc, vGiaNhapCu
             FROM BienTheSanPham
             WHERE MaBienThe = vMaBienThe
             FOR UPDATE;
 
             SET vTonSau = vTonTruoc + vSoLuong;
+            SET vGiaNhapMoi = ROUND(
+                ((vTonTruoc * vGiaNhapCu) + (vSoLuong * vDonGiaNhap)) / vTonSau,
+                2
+            );
 
             UPDATE BienTheSanPham
             SET SoLuongTon = vTonSau,
-                GiaNhap = (SELECT DonGia FROM ChiTietPhieuNhap
-                           WHERE MaPhieuNhap = NEW.MaPhieuNhap
-                             AND MaBienThe = vMaBienThe
-                           ORDER BY MaChiTietPhieuNhap DESC LIMIT 1)
+                GiaNhap = vGiaNhapMoi
             WHERE MaBienThe = vMaBienThe;
 
             INSERT INTO LichSuTonKho

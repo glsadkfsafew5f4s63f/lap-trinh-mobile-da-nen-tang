@@ -6,7 +6,7 @@ export type Product = {
   id: string; name: string; price: number; category: string; brand: string; description: string;
   image: string; images: string[]; colors: ProductColor[]; sizes: string[]; stockByVariant: number[][];
   variants: ProductVariant[]; oldPrice?: number; sqlId?: number; rating: number; reviewCount: number;
-  isFeatured?: boolean; isNew?: boolean;
+  isFeatured?: boolean; isNew?: boolean; stock?: number;
 };
 export type PriceSort = 'none' | 'asc' | 'desc';
 export type Category = { name: string; image: string };
@@ -41,6 +41,7 @@ export function loadProductsFromApi() {
         return {
           id: String(apiProduct.id), sqlId: apiProduct.id, name: apiProduct.name,
           description: apiProduct.description ?? '', price: Number(apiProduct.price) || 0,
+          stock: apiProduct.stock,
           oldPrice: apiProduct.oldPrice == null ? undefined : Number(apiProduct.oldPrice),
           category: apiProduct.category || 'Chưa phân loại', brand: apiProduct.brand || '',
           image: images[0] || '', images, colors: [], sizes: [], variants: [], stockByVariant: [],
@@ -73,6 +74,7 @@ export async function loadProductDetailFromApi(productId: string) {
     name: String(details.TenSanPham || current?.name || ''),
     description: String(details.MoTa || current?.description || ''),
     price: current?.price ?? Number(details.GiaBan || 0),
+    stock: variants.reduce((total, variant) => total + Math.max(Number(variant.stock) || 0, 0), 0),
     category: String(details.TenDanhMuc || current?.category || 'Chưa phân loại'),
     brand: String(details.TenThuongHieu || current?.brand || ''),
     image: images[0] || current?.image || '',

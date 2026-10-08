@@ -5,5 +5,7 @@
 .warehouse-create-form label { display: grid; gap: 6px; min-width: 0; color: #344054; font-size: 13px; }
 .warehouse-create-form input, .warehouse-create-form select, .warehouse-create-form textarea { width: 100%; min-width: 0; padding: 10px 12px; border: 1px solid #d0d5dd; border-radius: 6px; background: #fff; color: #17243a; font: inherit; }
 .warehouse-create-form textarea { min-height: 72px; resize: vertical; }
+.warehouse-cost-apply { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(150px, .6fr) auto; align-items: end; gap: 12px; padding: 14px; border: 1px solid #e3e8f1; border-radius: 8px; background: #f8faff; }
+.warehouse-cost-apply small { grid-column: 1 / -1; color: #718096; font-size: 11px; }
 .warehouse-create-line { display: grid; grid-template-columns: minmax(220px, 1fr) 130px 170px 60px; align-items: end; gap: 12px; padding: 12px 16px; border-top: 1px solid #eaecf0; }
-@media (max-width: 760px) { .warehouse-create-fields, .warehouse-create-line { grid-template-columns: 1fr; } }
+@media (max-width: 760px) { .warehouse-create-fields, .warehouse-create-line, .warehouse-cost-apply { grid-template-columns: 1fr; } }

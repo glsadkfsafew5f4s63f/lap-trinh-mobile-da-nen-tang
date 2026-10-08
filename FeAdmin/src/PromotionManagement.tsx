@@ -2,8 +2,18 @@ import { useEffect, useState } from "react";
 import "./promotion.css";
 import { PaginationControls, usePaginatedRows } from "./PaginationControls";
 
-type CatalogProduct = { MaSanPham: number; TenSanPham: string };
-type CatalogVariant = { MaBienThe: number; SKU: string };
+type CatalogProduct = {
+  MaSanPham: number;
+  TenSanPham: string;
+  GiaBan: number;
+  GiaNhap: number;
+};
+type CatalogVariant = {
+  MaBienThe: number;
+  SKU: string;
+  GiaBan: number;
+  GiaNhap: number;
+};
 
 function PromotionAssignment() {
   const [programs, setPrograms] = useState<Program[]>([]);
@@ -14,6 +24,38 @@ function PromotionAssignment() {
   const [variantId, setVariantId] = useState("");
   const [target, setTarget] = useState<"product" | "variant">("product");
   const [saving, setSaving] = useState(false);
+  const selectedProgram = programs.find(
+    (program) => String(program.MaChuongTrinh) === programId,
+  );
+  const selectedProduct = products.find(
+    (product) => String(product.MaSanPham) === productId,
+  );
+  const targetedVariants =
+    target === "variant"
+      ? variants.filter((variant) => String(variant.MaBienThe) === variantId)
+      : variants;
+  const belowCostVariants = targetedVariants.filter((variant) => {
+    if (!selectedProgram) return false;
+    const basePrice = Number(variant.GiaBan);
+    const cost = Number(variant.GiaNhap);
+    const discount =
+      selectedProgram.LoaiGiam === "PHAN_TRAM"
+        ? (basePrice * Number(selectedProgram.GiaTriGiam)) / 100
+        : Number(selectedProgram.GiaTriGiam);
+    return Math.max(basePrice - discount, 0) < cost;
+  });
+  const productBasePriceBelowCost =
+    target === "product" &&
+    variants.length === 0 &&
+    selectedProgram &&
+    selectedProduct &&
+    Math.max(
+      Number(selectedProduct.GiaBan) -
+        (selectedProgram.LoaiGiam === "PHAN_TRAM"
+          ? (Number(selectedProduct.GiaBan) * Number(selectedProgram.GiaTriGiam)) / 100
+          : Number(selectedProgram.GiaTriGiam)),
+      0,
+    ) < Number(selectedProduct.GiaNhap);
 
   useEffect(() => {
     Promise.all([
@@ -152,6 +194,15 @@ function PromotionAssignment() {
           {saving ? "Đang gắn..." : "Gắn chương trình"}
         </button>
       </div>
+      {(belowCostVariants.length > 0 || productBasePriceBelowCost) && (
+        <div className="price-loss-warning" role="status">
+          Giá sau giảm thấp hơn giá nhập
+          {belowCostVariants.length > 0
+            ? ` ở ${belowCostVariants.map((variant) => variant.SKU).join(", ")}`
+            : ""}
+          . Có thể tiếp tục nếu đây là chương trình xả hàng.
+        </div>
+      )}
     </section>
   );
 }

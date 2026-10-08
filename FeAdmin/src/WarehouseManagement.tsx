@@ -6,6 +6,7 @@ import { PaginationControls, usePaginatedRows } from "./PaginationControls";
 
 type Stock = {
   MaBienThe: number;
+  MaSanPham: number;
   SKU: string;
   TenSanPham: string;
   TenMau?: string;
@@ -16,7 +17,14 @@ type Stock = {
   SoLuongTamGiu: number;
   SoLuongCoTheBan: number;
   SoLuongDaBan: number;
+  SoLuongLauNam?: number;
+  NgayTonKhoCuNhat?: string;
 };
+const LOW_STOCK_THRESHOLD = 5;
+const isLongAgedStock = (row: Stock) => Number(row.SoLuongLauNam || 0) > 0;
+const isLowStock = (row: Stock) =>
+  row.SoLuongCoTheBan > 0 &&
+  row.SoLuongCoTheBan <= LOW_STOCK_THRESHOLD;
 type Purchase = {
   MaPhieuNhap: number;
   MaNhaCungCap: number;
@@ -43,6 +51,12 @@ type PurchaseItem = {
 };
 type PurchaseDraftLine = { MaBienThe: string; SoLuong: string; DonGia: string };
 type SupplierOption = { MaNhaCungCap: number; TenNhaCungCap: string };
+type PurchaseProductOption = {
+  MaSanPham: number;
+  TenSanPham: string;
+  GiaBan: number;
+  GiaNhap: number;
+};
 type StockHistory = {
   MaLichSuTonKho: number;
   SKU: string;
@@ -103,16 +117,15 @@ function InventoryScreen() {
   const filtered = rows.filter(
     (row) =>
       (filter === "ALL" ||
-        (filter === "LOW" &&
-          row.SoLuongCoTheBan > 0 &&
-          row.SoLuongCoTheBan <= 5) ||
+        (filter === "LOW" && isLowStock(row)) ||
         (filter === "OUT" && row.SoLuongCoTheBan <= 0) ||
+        (filter === "AGED" && isLongAgedStock(row)) ||
         (filter === "HELD" && row.SoLuongTamGiu > 0)) &&
       `${row.TenSanPham} ${row.SKU} ${row.TenMau || ""}`
         .toLowerCase()
         .includes(query.toLowerCase()),
   );
-        const pagination = usePaginatedRows(filtered, `${filter}:${query}`);
+  const pagination = usePaginatedRows(filtered, `${filter}:${query}`);
   return (
     <WarehouseShell
       eyebrow="KHO HÀNG / TỒN KHO"
@@ -134,12 +147,8 @@ function InventoryScreen() {
         />
         <Metric
           title="SKU sắp hết"
-          value={
-            rows.filter(
-              (row) => row.SoLuongCoTheBan > 0 && row.SoLuongCoTheBan <= 5,
-            ).length
-          }
-          note="ngưỡng ≤ 5"
+          value={rows.filter(isLowStock).length}
+          note="khả dụng 1–5"
           tone="orange"
         />
         <Metric
@@ -147,6 +156,12 @@ function InventoryScreen() {
           value={rows.filter((row) => row.SoLuongCoTheBan <= 0).length}
           note="khả dụng = 0"
           tone="red"
+        />
+        <Metric
+          title="Tồn kho lâu năm"
+          value={rows.filter(isLongAgedStock).length}
+          note="trên 1 năm · cần kiểm kê"
+          tone="orange"
         />
         <Metric
           title="Tổng số lượng tồn"
@@ -168,18 +183,22 @@ function InventoryScreen() {
       <div className="formula-note">
         <b>Σ Công thức vận hành:</b> Tồn khả dụng = Số lượng tồn - Số lượng tạm
         giữ. Dữ liệu lấy từ BienTheSanPham.
+        <small>
+          Cảnh báo lâu năm xác định từ lượng tồn còn lại theo lịch sử kho (FIFO);
+          tồn kho cũ không có lịch sử nhập/xuất sẽ chưa xác định được tuổi.
+        </small>
       </div>
       <Filters query={query} setQuery={setQuery} />
       <Tabs
         filter={filter}
         setFilter={setFilter}
-        labels={["Tất cả", "Sắp hết", "Hết hàng", "Có tạm giữ > 0"]}
+        keys={["ALL", "LOW", "OUT", "AGED", "HELD"]}
+        labels={["Tất cả", "Sắp hết (1–5)", "Hết hàng", "Lâu năm · kiểm kê", "Có tạm giữ > 0"]}
         counts={[
           rows.length,
-          rows.filter(
-            (row) => row.SoLuongCoTheBan > 0 && row.SoLuongCoTheBan <= 5,
-          ).length,
+          rows.filter(isLowStock).length,
           rows.filter((row) => row.SoLuongCoTheBan <= 0).length,
+          rows.filter(isLongAgedStock).length,
           rows.filter((row) => row.SoLuongTamGiu > 0).length,
         ]}
       />
@@ -206,7 +225,11 @@ function InventoryScreen() {
               <tr key={row.MaBienThe}>
                 <td>
                   <strong>{row.TenSanPham}</strong>
-                  <small>SKU variant</small>
+                  <small>
+                    {isLongAgedStock(row)
+                      ? `Cần kiểm kê · ${row.SoLuongLauNam} chiếc · từ ${date(row.NgayTonKhoCuNhat)}`
+                      : "SKU variant"}
+                  </small>
                 </td>
                 <td>
                   <b className="sku">{row.SKU}</b>
@@ -443,7 +466,10 @@ function PurchaseCreateForm({
 }) {
   const [suppliers, setSuppliers] = useState<SupplierOption[]>([]);
   const [variants, setVariants] = useState<Stock[]>([]);
+  const [products, setProducts] = useState<PurchaseProductOption[]>([]);
   const [supplierId, setSupplierId] = useState("");
+  const [applyProductId, setApplyProductId] = useState("");
+  const [applyProductCost, setApplyProductCost] = useState("");
   const [number, setNumber] = useState(() => `PN-${Date.now()}`);
   const [note, setNote] = useState("");
   const [lines, setLines] = useState<PurchaseDraftLine[]>([
@@ -458,14 +484,16 @@ function PurchaseCreateForm({
     Promise.all([
       fetch(`${API}/api/admin/suppliers`, { headers: headers() }),
       fetch(`${API}/api/admin/inventory`, { headers: headers() }),
+      fetch(`${API}/api/admin/products`, { headers: headers() }),
     ])
-      .then(async ([supplierResponse, inventoryResponse]) => {
-        if (!supplierResponse.ok || !inventoryResponse.ok) {
-          throw new Error("Không thể tải nhà cung cấp hoặc danh sách SKU.");
+      .then(async ([supplierResponse, inventoryResponse, productResponse]) => {
+        if (!supplierResponse.ok || !inventoryResponse.ok || !productResponse.ok) {
+          throw new Error("Không thể tải nhà cung cấp, sản phẩm hoặc danh sách SKU.");
         }
-        const [supplierBody, inventoryBody] = await Promise.all([
+        const [supplierBody, inventoryBody, productBody] = await Promise.all([
           supplierResponse.json(),
           inventoryResponse.json(),
+          productResponse.json(),
         ]);
         if (!active) return;
         const supplierRows = Array.isArray(supplierBody.data)
@@ -474,9 +502,17 @@ function PurchaseCreateForm({
         const inventoryRows = Array.isArray(inventoryBody.data)
           ? inventoryBody.data
           : [];
+        const productRows = Array.isArray(productBody.data)
+          ? productBody.data
+          : [];
         setSuppliers(supplierRows);
         setVariants(inventoryRows);
+        setProducts(productRows);
         if (supplierRows[0]) setSupplierId(String(supplierRows[0].MaNhaCungCap));
+        if (productRows[0]) {
+          setApplyProductId(String(productRows[0].MaSanPham));
+          setApplyProductCost(String(productRows[0].GiaNhap));
+        }
       })
       .catch((cause) => {
         if (active) {
@@ -494,6 +530,36 @@ function PurchaseCreateForm({
       active = false;
     };
   }, []);
+
+  const applyProductCostToVariants = () => {
+    const productId = Number(applyProductId);
+    const cost = Number(applyProductCost);
+    if (!productId || !Number.isFinite(cost) || cost < 0) return;
+    const productVariants = variants.filter(
+      (variant) => variant.MaSanPham === productId,
+    );
+    setLines((current) => {
+      const selectedIds = new Set(
+        current
+          .map((line) => Number(line.MaBienThe))
+          .filter((id) => id > 0),
+      );
+      const updated = current.map((line) => {
+        const variant = productVariants.find(
+          (item) => String(item.MaBienThe) === line.MaBienThe,
+        );
+        return variant ? { ...line, DonGia: String(cost) } : line;
+      });
+      const missingVariants = productVariants
+        .filter((variant) => !selectedIds.has(variant.MaBienThe))
+        .map((variant) => ({
+          MaBienThe: String(variant.MaBienThe),
+          SoLuong: "",
+          DonGia: String(cost),
+        }));
+      return [...updated, ...missingVariants];
+    });
+  };
 
   const updateLine = (
     index: number,
@@ -541,6 +607,10 @@ function PurchaseCreateForm({
       )
     ) {
       setError("Mỗi dòng cần SKU, số lượng nguyên dương và đơn giá hợp lệ.");
+      return;
+    }
+    if (new Set(items.map((item) => item.MaBienThe)).size !== items.length) {
+      setError("Mỗi SKU chỉ được có một dòng. Hãy gộp số lượng vào cùng dòng.");
       return;
     }
 
@@ -617,6 +687,58 @@ function PurchaseCreateForm({
           Ghi chú
           <textarea value={note} onChange={(event) => setNote(event.target.value)} />
         </label>
+        <div className="warehouse-cost-apply">
+          <label>
+            Áp dụng giá nhập sản phẩm cho các SKU
+            <select
+              value={applyProductId}
+              onChange={(event) => {
+                const value = event.target.value;
+                setApplyProductId(value);
+                const product = products.find(
+                  (item) => String(item.MaSanPham) === value,
+                );
+                setApplyProductCost(product ? String(product.GiaNhap) : "");
+              }}
+              disabled={loading || saving}
+            >
+              <option value="">Chọn sản phẩm</option>
+              {products.map((product) => (
+                <option key={product.MaSanPham} value={product.MaSanPham}>
+                  {product.TenSanPham}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Giá nhập áp dụng
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={applyProductCost}
+              onChange={(event) => setApplyProductCost(event.target.value)}
+              disabled={loading || saving}
+            />
+          </label>
+          <button
+            type="button"
+            className="outline-action"
+            onClick={applyProductCostToVariants}
+            disabled={
+              loading ||
+              saving ||
+              !applyProductId ||
+              applyProductCost === "" ||
+              !variants.some(
+                (variant) => variant.MaSanPham === Number(applyProductId),
+              )
+            }
+          >
+            Thêm / áp dụng cho tất cả SKU
+          </button>
+          <small>SKU mới được thêm với số lượng trống; nhập số lượng thực tế cho từng dòng trước khi lưu.</small>
+        </div>
         <div className="warehouse-table-card">
           <div className="table-caption">
             <strong>Chi tiết hàng nhập</strong>
@@ -647,11 +769,20 @@ function PurchaseCreateForm({
                   required
                 >
                   <option value="">Chọn SKU</option>
-                  {variants.map((variant) => (
+                  {variants
+                    .filter((variant) =>
+                      variant.MaBienThe === Number(line.MaBienThe) ||
+                      !lines.some(
+                        (otherLine, otherIndex) =>
+                          otherIndex !== index &&
+                          Number(otherLine.MaBienThe) === variant.MaBienThe,
+                      ),
+                    )
+                    .map((variant) => (
                     <option key={variant.MaBienThe} value={variant.MaBienThe}>
                       {variant.SKU} · {variant.TenSanPham} · {variant.TenMau || "-"} / {variant.TenKichThuoc || "-"}
                     </option>
-                  ))}
+                    ))}
                 </select>
               </label>
               <label>
@@ -1062,15 +1193,16 @@ function Filters({
 function Tabs({
   filter,
   setFilter,
+  keys = ["ALL", "LOW", "OUT", "HELD", "DIEU_CHINH"],
   labels,
   counts,
 }: {
   filter: string;
   setFilter: (value: string) => void;
+  keys?: string[];
   labels: string[];
   counts: number[];
 }) {
-  const keys = ["ALL", "LOW", "OUT", "HELD", "DIEU_CHINH"];
   return (
     <div className="warehouse-tabs">
       {labels.map((label, index) => (

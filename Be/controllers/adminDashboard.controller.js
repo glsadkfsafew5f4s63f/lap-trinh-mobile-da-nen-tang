@@ -1,16 +1,30 @@
 const db = require('../common/db');
+const getLongAgedStock = require('../utils/stockAging');
 
 exports.dashboard = async (_req, res) => {
     try {
-        const [[[users]], [[products]], [[orders]], [[revenue]], [[stock]], [[pending]], [[lowStock]], [[activeProducts]]] = await Promise.all([
+        const [[[users]], [[products]], [[orders]], [[revenue]], [[stock]], [[pending]], [[lowStock]], [[activeProducts]], [lowStockItems], longAgedStockItems] = await Promise.all([
             db.query('SELECT COUNT(*) total FROM NguoiDung'),
             db.query('SELECT COUNT(*) total FROM SanPham'),
             db.query('SELECT COUNT(*) total FROM DonHang'),
             db.query("SELECT COALESCE(SUM(ThanhTien), 0) total FROM DonHang WHERE TrangThaiDonHang = 'DA_GIAO'"),
             db.query('SELECT COALESCE(SUM(SoLuongTon), 0) ton, COALESCE(SUM(SoLuongTamGiu), 0) tamgiu FROM BienTheSanPham'),
             db.query("SELECT COUNT(*) total FROM DonHang WHERE TrangThaiDonHang = 'CHO_XAC_NHAN'"),
-            db.query('SELECT COUNT(*) total FROM BienTheSanPham WHERE GREATEST(SoLuongTon - SoLuongTamGiu, 0) <= 10'),
-            db.query('SELECT COUNT(DISTINCT MaSanPham) total FROM BienTheSanPham WHERE SoLuongTon > SoLuongTamGiu')
+            db.query('SELECT COUNT(*) total FROM BienTheSanPham WHERE GREATEST(SoLuongTon - SoLuongTamGiu, 0) BETWEEN 1 AND 5'),
+            db.query('SELECT COUNT(DISTINCT MaSanPham) total FROM BienTheSanPham WHERE SoLuongTon > SoLuongTamGiu'),
+            db.query(`
+                SELECT bt.MaBienThe, bt.SKU, sp.TenSanPham, ms.TenMau, kt.TenKichThuoc,
+                       bt.SoLuongTon, bt.SoLuongTamGiu,
+                       GREATEST(bt.SoLuongTon - bt.SoLuongTamGiu, 0) SoLuongCoTheBan
+                FROM BienTheSanPham bt
+                JOIN SanPham sp ON sp.MaSanPham = bt.MaSanPham
+                LEFT JOIN MauSac ms ON ms.MaMauSac = bt.MaMauSac
+                LEFT JOIN KichThuoc kt ON kt.MaKichThuoc = bt.MaKichThuoc
+                WHERE GREATEST(bt.SoLuongTon - bt.SoLuongTamGiu, 0) BETWEEN 1 AND 5
+                ORDER BY SoLuongCoTheBan ASC, sp.TenSanPham, bt.SKU
+                LIMIT 5
+            `),
+            getLongAgedStock()
         ]);
 
         const [statusBreakdown] = await db.query(`
@@ -58,6 +72,9 @@ exports.dashboard = async (_req, res) => {
                 stock: { ton: Number(stock.ton), tamgiu: Number(stock.tamgiu) },
                 pendingConfirmation: Number(pending.total),
                 lowStock: Number(lowStock.total),
+                lowStockItems,
+                longAgedStock: longAgedStockItems.length,
+                longAgedStockItems: longAgedStockItems.slice(0, 5),
                 activeProducts: Number(activeProducts.total),
                 statusBreakdown,
                 monthlyRevenue,

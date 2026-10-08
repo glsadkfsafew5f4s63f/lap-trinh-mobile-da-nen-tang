@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import './App.css'
 import './accordion.css'
 import './dashboard-data.css'
+import './dashboard-low-stock.css'
 import ProductManagement from './ProductManagement'
 import OrderManagement from './OrderManagement'
 import FinancialManagement from './FinancialManagement'
@@ -16,11 +17,23 @@ type Order = { MaDonHang: number; MaDonHangCode?: string; ThanhTien: number; Tra
 type StatusCount = { status: string; total: number }
 type Month = { period: string; revenue: number; orders: number }
 type Category = { id: number; name: string; revenue: number }
-type DashboardData = { users: number; products: number; orders: number; revenue: number; stock: { ton: number; tamgiu: number }; pendingConfirmation: number; lowStock: number; activeProducts: number; statusBreakdown: StatusCount[]; monthlyRevenue: Month[]; categoryRevenue: Category[]; recentOrders: Order[] }
+type LowStockItem = {
+  MaBienThe: number
+  SKU: string
+  TenSanPham: string
+  TenMau?: string
+  TenKichThuoc?: string
+  SoLuongCoTheBan: number
+}
+type LongAgedStockItem = LowStockItem & {
+  SoLuongLauNam: number
+  NgayTonKhoCuNhat: string
+}
+type DashboardData = { users: number; products: number; orders: number; revenue: number; stock: { ton: number; tamgiu: number }; pendingConfirmation: number; lowStock: number; lowStockItems: LowStockItem[]; longAgedStock: number; longAgedStockItems: LongAgedStockItem[]; activeProducts: number; statusBreakdown: StatusCount[]; monthlyRevenue: Month[]; categoryRevenue: Category[]; recentOrders: Order[] }
 type Nav = { icon: string; label: string; key: string }
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:7000'
-const emptyData: DashboardData = { users: 0, products: 0, orders: 0, revenue: 0, stock: { ton: 0, tamgiu: 0 }, pendingConfirmation: 0, lowStock: 0, activeProducts: 0, statusBreakdown: [], monthlyRevenue: [], categoryRevenue: [], recentOrders: [] }
+const emptyData: DashboardData = { users: 0, products: 0, orders: 0, revenue: 0, stock: { ton: 0, tamgiu: 0 }, pendingConfirmation: 0, lowStock: 0, lowStockItems: [], longAgedStock: 0, longAgedStockItems: [], activeProducts: 0, statusBreakdown: [], monthlyRevenue: [], categoryRevenue: [], recentOrders: [] }
 const normalizeDashboardData = (value: Partial<DashboardData> | null | undefined): DashboardData => ({
   ...emptyData,
   ...value,
@@ -30,6 +43,9 @@ const normalizeDashboardData = (value: Partial<DashboardData> | null | undefined
   revenue: Number(value?.revenue ?? 0),
   pendingConfirmation: Number(value?.pendingConfirmation ?? 0),
   lowStock: Number(value?.lowStock ?? 0),
+  lowStockItems: Array.isArray(value?.lowStockItems) ? value.lowStockItems : [],
+  longAgedStock: Number(value?.longAgedStock ?? 0),
+  longAgedStockItems: Array.isArray(value?.longAgedStockItems) ? value.longAgedStockItems : [],
   activeProducts: Number(value?.activeProducts ?? 0),
   stock: {
     ton: Number(value?.stock?.ton ?? 0),
@@ -231,8 +247,83 @@ function AdminLogin({ onSuccess }: { onSuccess: (roles: string[]) => void }) {
 function Dashboard({ data, range, setRange, setActive }: { data: DashboardData; range: string; setRange: (value: string) => void; setActive: (value: string) => void }) {
   const count = (key: string) => data.statusBreakdown.find((item) => item.status === key)?.total || 0
   const maxRevenue = Math.max(...data.monthlyRevenue.map((item) => Number(item.revenue)), 1)
-  const cards = [['Tổng doanh thu', money(data.revenue), '▣', 'violet', 'Đơn đã giao'], ['Tổng đơn hàng', data.orders.toLocaleString('vi-VN'), '▢', 'cyan', 'Tổng hệ thống'], ['Khách hàng', data.users.toLocaleString('vi-VN'), '♧', 'green', 'Tổng hệ thống'], ['Sản phẩm', String(data.activeProducts || data.products), '♧', 'orange', 'Đang khả dụng'], ['Cần xác nhận', String(data.pendingConfirmation), '◫', 'yellow', 'Chờ xử lý'], ['Sắp hết hàng', String(data.lowStock), '△', 'red', 'Theo SKU']]
-  return <><section className="page-heading"><div><small>Trang chủ <span>›</span> Tổng quan</small><h1>Tổng quan hoạt động</h1><p>Theo dõi dữ liệu kinh doanh và vận hành từ hệ thống FashionStore.</p></div><div className="heading-actions"><div className="range-tabs">{['Hôm nay', '7 ngày qua', '30 ngày qua', '12 tháng qua'].map((item) => <button className={range === item ? 'selected' : ''} key={item} onClick={() => setRange(item)}>{item}</button>)}</div><div><button className="secondary">▣ &nbsp;Tùy chọn ngày</button><button className="secondary">⇩ &nbsp;Xuất báo cáo</button></div></div></section><section className="metric-grid">{cards.map(([title, value, icon, color, note]) => <article className={`metric ${color}`} key={title}><div><span>{title}</span><b>{icon}</b></div><strong>{value}</strong><small>{note}</small></article>)}</section><section className="panel progress"><div className="panel-title"><h2>⇄ &nbsp;Tiến độ & Phân bố đơn hàng trong tháng</h2><span>Tổng cộng: <b>{data.orders.toLocaleString('vi-VN')}</b> đơn phát sinh</span></div><div className="bar"><i /><i /><i /><i /><i /></div><div className="legend">{[['CHO_XAC_NHAN', 'Chờ xác nhận'], ['DA_XAC_NHAN', 'Đã xác nhận'], ['DANG_GIAO', 'Đang giao'], ['DA_GIAO', 'Giao thành công'], ['DA_HUY', 'Đơn đã hủy']].map(([key, label]) => <span key={key}>● {label} <b>{count(key)}</b></span>)}</div></section><section className="charts"><div className="panel revenue"><div className="panel-title"><div><h2>Doanh thu & Đơn hàng theo thời gian</h2><p>Dữ liệu theo các tháng có phát sinh đơn.</p></div></div><div className="chart dynamic-chart"><div className="chart-data">{data.monthlyRevenue.length ? data.monthlyRevenue.map((item) => <div className="chart-column" key={item.period}><span style={{ height: `${Math.max(4, Number(item.revenue) / maxRevenue * 100)}%` }} /><small>{item.period.substring(5)}</small></div>) : <p className="chart-empty">Chưa có dữ liệu doanh thu</p>}</div></div><div className="chart-footer"><strong>{data.monthlyRevenue.length ? money(data.monthlyRevenue.reduce((sum, item) => sum + Number(item.revenue), 0) / data.monthlyRevenue.length) : '—'}<small>Doanh thu trung bình/tháng</small></strong><strong className="green-text">{data.monthlyRevenue.reduce((sum, item) => sum + Number(item.orders), 0)}<small>Đơn hàng trong kỳ</small></strong></div></div><div className="panel categories"><div className="panel-title"><h2>Tỷ trọng danh mục</h2><button className="period">{data.categoryRevenue.length ? 'Theo dữ liệu' : '—'}</button></div><div className="donut"><b>{money(data.revenue)}<small>DOANH SỐ</small></b></div>{data.categoryRevenue.length ? data.categoryRevenue.map((item) => <p key={item.id}>● {item.name} {money(item.revenue)}</p>) : <p>Chưa có dữ liệu danh mục</p>}</div></section><section className="bottom"><div className="panel recent"><div className="panel-title"><h2>Đơn hàng gần đây</h2><button onClick={() => setActive('orders')}>Xem tất cả →</button></div><table><thead><tr><th>Mã đơn</th><th>Ngày đặt</th><th>Giá trị</th><th>Trạng thái</th></tr></thead><tbody>{data.recentOrders.length ? data.recentOrders.map((order) => <tr key={order.MaDonHang}><td><b>{order.MaDonHangCode || `DH${order.MaDonHang}`}</b></td><td>{new Date(order.NgayDat).toLocaleDateString('vi-VN')}</td><td>{Number(order.ThanhTien).toLocaleString('vi-VN')} đ</td><td><em className={order.TrangThaiDonHang.toLowerCase()}>{statusLabel[order.TrangThaiDonHang] || order.TrangThaiDonHang}</em></td></tr>) : <tr><td colSpan={4}>Chưa có đơn hàng</td></tr>}</tbody></table></div><div className="panel inventory"><div className="panel-title"><h2>Tình trạng kho</h2><button onClick={() => setActive('inventory')}>Chi tiết →</button></div><strong>{data.stock.ton.toLocaleString('vi-VN')}</strong><span>sản phẩm đang có sẵn</span><div className="stock"><i /></div><p>● Có thể bán <b>{Math.max(data.stock.ton - data.stock.tamgiu, 0)}</b></p><p>● Đang tạm giữ <b>{data.stock.tamgiu}</b></p></div></section></>
+  const cards = [['Tổng doanh thu', money(data.revenue), '▣', 'violet', 'Đơn đã giao'], ['Tổng đơn hàng', data.orders.toLocaleString('vi-VN'), '▢', 'cyan', 'Tổng hệ thống'], ['Khách hàng', data.users.toLocaleString('vi-VN'), '♧', 'green', 'Tổng hệ thống'], ['Sản phẩm', String(data.activeProducts || data.products), '♧', 'orange', 'Đang khả dụng'], ['Cần xác nhận', String(data.pendingConfirmation), '◫', 'yellow', 'Chờ xử lý'], ['Sắp hết hàng', String(data.lowStock), '△', 'red', 'Khả dụng ≤ 5']]
+  return (
+    <>
+      <section className="page-heading">
+        <div><small>Trang chủ <span>›</span> Tổng quan</small><h1>Tổng quan hoạt động</h1><p>Theo dõi dữ liệu kinh doanh và vận hành từ hệ thống FashionStore.</p></div>
+        <div className="heading-actions">
+          <div className="range-tabs">{['Hôm nay', '7 ngày qua', '30 ngày qua', '12 tháng qua'].map((item) => <button className={range === item ? 'selected' : ''} key={item} onClick={() => setRange(item)}>{item}</button>)}</div>
+          <div><button className="secondary">▣ &nbsp;Tùy chọn ngày</button><button className="secondary">⇩ &nbsp;Xuất báo cáo</button></div>
+        </div>
+      </section>
+      <section className="metric-grid">
+        {cards.map(([title, value, icon, color, note]) => <article className={`metric ${color}`} key={title}><div><span>{title}</span><b>{icon}</b></div><strong>{value}</strong><small>{note}</small></article>)}
+      </section>
+      <section className="panel progress">
+        <div className="panel-title"><h2>⇄ &nbsp;Tiến độ & Phân bố đơn hàng trong tháng</h2><span>Tổng cộng: <b>{data.orders.toLocaleString('vi-VN')}</b> đơn phát sinh</span></div>
+        <div className="bar"><i /><i /><i /><i /><i /></div>
+        <div className="legend">{[['CHO_XAC_NHAN', 'Chờ xác nhận'], ['DA_XAC_NHAN', 'Đã xác nhận'], ['DANG_GIAO', 'Đang giao'], ['DA_GIAO', 'Giao thành công'], ['DA_HUY', 'Đơn đã hủy']].map(([key, label]) => <span key={key}>● {label} <b>{count(key)}</b></span>)}</div>
+      </section>
+      <section className="charts">
+        <div className="panel revenue">
+          <div className="panel-title"><div><h2>Doanh thu & Đơn hàng theo thời gian</h2><p>Dữ liệu theo các tháng có phát sinh đơn.</p></div></div>
+          <div className="chart dynamic-chart"><div className="chart-data">{data.monthlyRevenue.length ? data.monthlyRevenue.map((item) => <div className="chart-column" key={item.period}><span style={{ height: `${Math.max(4, Number(item.revenue) / maxRevenue * 100)}%` }} /><small>{item.period.substring(5)}</small></div>) : <p className="chart-empty">Chưa có dữ liệu doanh thu</p>}</div></div>
+          <div className="chart-footer"><strong>{data.monthlyRevenue.length ? money(data.monthlyRevenue.reduce((sum, item) => sum + Number(item.revenue), 0) / data.monthlyRevenue.length) : '—'}<small>Doanh thu trung bình/tháng</small></strong><strong className="green-text">{data.monthlyRevenue.reduce((sum, item) => sum + Number(item.orders), 0)}<small>Đơn hàng trong kỳ</small></strong></div>
+        </div>
+        <div className="panel categories">
+          <div className="panel-title"><h2>Tỷ trọng danh mục</h2><button className="period">{data.categoryRevenue.length ? 'Theo dữ liệu' : '—'}</button></div>
+          <div className="donut"><b>{money(data.revenue)}<small>DOANH SỐ</small></b></div>
+          {data.categoryRevenue.length ? data.categoryRevenue.map((item) => <p key={item.id}>● {item.name} {money(item.revenue)}</p>) : <p>Chưa có dữ liệu danh mục</p>}
+        </div>
+      </section>
+      <section className="bottom">
+        <div className="panel recent">
+          <div className="panel-title"><h2>Đơn hàng gần đây</h2><button onClick={() => setActive('orders')}>Xem tất cả →</button></div>
+          <table><thead><tr><th>Mã đơn</th><th>Ngày đặt</th><th>Giá trị</th><th>Trạng thái</th></tr></thead><tbody>{data.recentOrders.length ? data.recentOrders.map((order) => <tr key={order.MaDonHang}><td><b>{order.MaDonHangCode || `DH${order.MaDonHang}`}</b></td><td>{new Date(order.NgayDat).toLocaleDateString('vi-VN')}</td><td>{Number(order.ThanhTien).toLocaleString('vi-VN')} đ</td><td><em className={order.TrangThaiDonHang.toLowerCase()}>{statusLabel[order.TrangThaiDonHang] || order.TrangThaiDonHang}</em></td></tr>) : <tr><td colSpan={4}>Chưa có đơn hàng</td></tr>}</tbody></table>
+        </div>
+        <div className="panel inventory">
+          <div className="panel-title"><h2>Tình trạng kho</h2><button onClick={() => setActive('inventory')}>Chi tiết →</button></div>
+          <strong>{data.stock.ton.toLocaleString('vi-VN')}</strong><span>sản phẩm đang có sẵn</span><div className="stock"><i /></div>
+          <p>● Có thể bán <b>{Math.max(data.stock.ton - data.stock.tamgiu, 0)}</b></p><p>● Đang tạm giữ <b>{data.stock.tamgiu}</b></p>
+        </div>
+      </section>
+      <section className="panel dashboard-low-stock">
+        <div className="panel-title">
+          <div><h2>Sản phẩm sắp hết hàng</h2><p>SKU còn khả dụng từ 1 đến 5 chiếc</p></div>
+          <button onClick={() => setActive('inventory')}>Xem tồn kho →</button>
+        </div>
+        {data.lowStockItems.length ? (
+          <ul className="dashboard-low-stock-list">
+            {data.lowStockItems.map((item) => (
+              <li key={item.MaBienThe}>
+                <span><strong>{item.TenSanPham}</strong><small>{item.SKU} · {[item.TenMau, item.TenKichThuoc].filter(Boolean).join(' / ') || 'Không phân loại'}</small></span>
+                <b>{item.SoLuongCoTheBan} còn</b>
+              </li>
+            ))}
+          </ul>
+        ) : <p className="dashboard-low-stock-empty">Hiện không có SKU nào sắp hết hàng.</p>}
+        {data.lowStock > data.lowStockItems.length && <p className="dashboard-low-stock-more">Còn {data.lowStock - data.lowStockItems.length} SKU sắp hết hàng khác trong kho.</p>}
+      </section>
+      <section className="panel dashboard-low-stock dashboard-aged-stock">
+        <div className="panel-title">
+          <div><h2>Tồn kho lâu năm · cần kiểm kê</h2><p>{data.longAgedStock} SKU còn lượng tồn được ghi nhận từ hơn 1 năm trước</p></div>
+          <button onClick={() => setActive('inventory')}>Kiểm tra tồn kho →</button>
+        </div>
+        {data.longAgedStockItems.length ? (
+          <ul className="dashboard-low-stock-list">
+            {data.longAgedStockItems.map((item) => (
+              <li key={item.MaBienThe}>
+                <span><strong>{item.TenSanPham}</strong><small>{item.SKU} · Nhập từ {new Date(item.NgayTonKhoCuNhat).toLocaleDateString('vi-VN')}</small></span>
+                <b>{item.SoLuongLauNam} chiếc cần kiểm kê</b>
+              </li>
+            ))}
+          </ul>
+        ) : <p className="dashboard-low-stock-empty">Chưa có lô tồn kho nào quá 1 năm theo lịch sử nhập/xuất.</p>}
+        {data.longAgedStock > data.longAgedStockItems.length && <p className="dashboard-low-stock-more">Còn {data.longAgedStock - data.longAgedStockItems.length} SKU tồn lâu năm khác trong kho.</p>}
+      </section>
+    </>
+  )
 }
 
 export default App

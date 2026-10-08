@@ -3,6 +3,37 @@ import "./product.css";
 import { PaginationControls, usePaginatedRows } from "./PaginationControls";
 
 type Row = Record<string, unknown>;
+type VariantRow = {
+  MaBienThe: number;
+  MaSanPham: number;
+  MaSanPhamCode: string;
+  TenSanPham: string;
+  SKU: string;
+  TenMau?: string | null;
+  TenKichThuoc?: string | null;
+  GiaBan: number;
+  GiaNhap: number;
+  SoLuongTon: number;
+  SoLuongTamGiu: number;
+  TrangThai: number;
+};
+type VariantDraft = { GiaBan: string; GiaNhap: string; TrangThai: boolean };
+type ProductOption = {
+  MaSanPham: number;
+  MaSanPhamCode: string;
+  TenSanPham: string;
+  GiaBan: number;
+  GiaNhap: number;
+};
+type VariantAttribute = { id: number; name: string };
+type NewVariantDraft = {
+  MaSanPham: string;
+  SKU: string;
+  MaMauSac: string;
+  MaKichThuoc: string;
+  GiaBan: string;
+  GiaNhap: string;
+};
 const API = import.meta.env.VITE_API_URL || "http://localhost:7000";
 const headers = () => ({
   "Content-Type": "application/json",
@@ -16,209 +47,314 @@ const loadJson = (url: string) =>
   );
 
 export function VariantAdminScreen() {
-  const [products, setProducts] = useState<Row[]>([]);
-  const [colors, setColors] = useState<Row[]>([]);
-  const [sizes, setSizes] = useState<Row[]>([]);
-  const [productId, setProductId] = useState("");
-  const [rows, setRows] = useState<Row[]>([]);
-  const [form, setForm] = useState({
-    SKU: "",
-    MaMauSac: "",
-    MaKichThuoc: "",
-    GiaBan: "0",
-    GiaNhap: "0",
-  });
+  const [rows, setRows] = useState<VariantRow[]>([]);
+  const [products, setProducts] = useState<ProductOption[]>([]);
+  const [colors, setColors] = useState<VariantAttribute[]>([]);
+  const [sizes, setSizes] = useState<VariantAttribute[]>([]);
+  const [drafts, setDrafts] = useState<Record<number, VariantDraft>>({});
+  const [newVariant, setNewVariant] = useState<NewVariantDraft | null>(null);
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [loading, setLoading] = useState(true);
+  const [savingId, setSavingId] = useState<number | null>(null);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [adding, setAdding] = useState(false);
   useEffect(() => {
     let current = true;
-    void Promise.all([
-      loadJson(`${API}/api/admin/products`),
-      loadJson(`${API}/api/admin/catalog/colors`),
-      loadJson(`${API}/api/admin/catalog/sizes`),
-    ]).then(([productBody, colorBody, sizeBody]) => {
-      if (!current) return;
-      const items = Array.isArray(productBody?.data) ? productBody.data : [];
-      setProducts(items);
-      setColors(Array.isArray(colorBody?.data) ? colorBody.data : []);
-      setSizes(Array.isArray(sizeBody?.data) ? sizeBody.data : []);
-      if (items[0]) setProductId(String(items[0].MaSanPham));
-    }).catch(() => undefined);
+    Promise.all([
+      fetch(`${API}/api/admin/products`, { headers: headers() }),
+      fetch(`${API}/api/admin/catalog/colors`, { headers: headers() }),
+      fetch(`${API}/api/admin/catalog/sizes`, { headers: headers() }),
+    ])
+      .then(async ([productsResponse, colorsResponse, sizesResponse]) => {
+        const responses = [productsResponse, colorsResponse, sizesResponse];
+        const bodies = await Promise.all(
+          responses.map((response) => response.json().catch(() => null)),
+        );
+        const failedIndex = responses.findIndex((response) => !response.ok);
+        if (failedIndex >= 0) {
+          throw new Error(bodies[failedIndex]?.message || "Không thể tải dữ liệu để thêm SKU.");
+        }
+        if (!current) return;
+        const productRows = Array.isArray(bodies[0]?.data) ? bodies[0].data : [];
+        const colorRows = Array.isArray(bodies[1]?.data) ? bodies[1].data : [];
+        const sizeRows = Array.isArray(bodies[2]?.data) ? bodies[2].data : [];
+        setProducts(productRows);
+        setColors(colorRows.map((row: { MaMauSac: number; TenMau: string }) => ({
+          id: Number(row.MaMauSac),
+          name: row.TenMau,
+        })));
+        setSizes(sizeRows.map((row: { MaKichThuoc: number; TenKichThuoc: string }) => ({
+          id: Number(row.MaKichThuoc),
+          name: row.TenKichThuoc,
+        })));
+      })
+      .catch((cause) => {
+        if (current) setError(cause instanceof Error ? cause.message : "Không thể tải dữ liệu để thêm SKU.");
+      });
     return () => { current = false; };
   }, []);
   useEffect(() => {
     let current = true;
-    setRows([]);
-    if (productId) {
-      void loadJson(`${API}/api/admin/products/${productId}/variants`).then(
-        (body) => {
-          if (current) setRows(Array.isArray(body?.data) ? body.data : []);
-        },
-      ).catch(() => { if (current) setRows([]); });
-    }
+    fetch(`${API}/api/admin/variants`, { headers: headers() })
+      .then(async (response) => {
+        const body = await response.json().catch(() => null);
+        if (!response.ok) {
+          throw new Error(body?.message || "Không thể tải danh sách SKU.");
+        }
+        if (current) setRows(Array.isArray(body?.data) ? body.data : []);
+      })
+      .catch((cause) => {
+        if (current) {
+          setError(cause instanceof Error ? cause.message : "Không thể tải danh sách SKU.");
+        }
+      })
+      .finally(() => {
+        if (current) setLoading(false);
+      });
     return () => { current = false; };
-  }, [productId]);
-  const pagination = usePaginatedRows(rows, productId);
-  const create = async () => {
-    if (!productId || !form.SKU) return;
-    const response = await fetch(
-      `${API}/api/admin/products/${productId}/variants`,
-      {
+  }, []);
+  const filteredRows = rows.filter((row) => {
+    const searchable = `${row.SKU} ${row.TenSanPham} ${row.MaSanPhamCode} ${row.TenMau || ""} ${row.TenKichThuoc || ""}`.toLowerCase();
+    return searchable.includes(query.trim().toLowerCase()) &&
+      (statusFilter === "ALL" || Number(row.TrangThai) === Number(statusFilter));
+  });
+  const pagination = usePaginatedRows(filteredRows, `${query}:${statusFilter}`);
+  const openNewVariant = () => {
+    const product = products[0];
+    setError("");
+    setSuccess("");
+    setNewVariant({
+      MaSanPham: product ? String(product.MaSanPham) : "",
+      SKU: "",
+      MaMauSac: "",
+      MaKichThuoc: "",
+      GiaBan: String(product?.GiaBan ?? 0),
+      GiaNhap: String(product?.GiaNhap ?? 0),
+    });
+  };
+  const updateNewVariant = (field: keyof NewVariantDraft, value: string) => {
+    setNewVariant((current) => {
+      if (!current) return current;
+      if (field === "MaSanPham") {
+        const product = products.find((item) => String(item.MaSanPham) === value);
+        return {
+          ...current,
+          MaSanPham: value,
+          GiaBan: String(product?.GiaBan ?? 0),
+          GiaNhap: String(product?.GiaNhap ?? 0),
+        };
+      }
+      return { ...current, [field]: value };
+    });
+  };
+  const addVariant = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!newVariant) return;
+    const GiaBan = Number(newVariant.GiaBan);
+    const GiaNhap = Number(newVariant.GiaNhap);
+    if (!newVariant.SKU.trim() || newVariant.SKU.trim().length > 80 ||
+      !Number.isFinite(GiaBan) || GiaBan < 0 || !Number.isFinite(GiaNhap) || GiaNhap < 0) {
+      setError("Nhập mã SKU tối đa 80 ký tự và giá bán/giá nhập hợp lệ.");
+      return;
+    }
+    setAdding(true);
+    setError("");
+    setSuccess("");
+    try {
+      const response = await fetch(`${API}/api/admin/products/${newVariant.MaSanPham}/variants`, {
         method: "POST",
         headers: headers(),
         body: JSON.stringify({
-          ...form,
-          MaSanPham: Number(productId),
-          MaMauSac: Number(form.MaMauSac) || null,
-          MaKichThuoc: Number(form.MaKichThuoc) || null,
-          GiaBan: Number(form.GiaBan),
-          GiaNhap: Number(form.GiaNhap),
+          SKU: newVariant.SKU.trim(),
+          MaMauSac: Number(newVariant.MaMauSac) || null,
+          MaKichThuoc: Number(newVariant.MaKichThuoc) || null,
+          GiaBan,
+          GiaNhap,
         }),
-      },
-    );
-    if (response.ok) {
-      setForm({
-        SKU: "",
-        MaMauSac: "",
-        MaKichThuoc: "",
-        GiaBan: "0",
-        GiaNhap: "0",
       });
-      const body = await loadJson(
-        `${API}/api/admin/products/${productId}/variants`,
-      );
-      setRows(body?.data || []);
+      const body = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(body?.message || "Không thể thêm SKU.");
+      const listResponse = await fetch(`${API}/api/admin/variants`, { headers: headers() });
+      const listBody = await listResponse.json().catch(() => null);
+      if (!listResponse.ok) throw new Error(listBody?.message || "Đã thêm SKU nhưng không thể tải lại danh sách.");
+      setRows(Array.isArray(listBody?.data) ? listBody.data : []);
+      setNewVariant(null);
+      setSuccess(`Đã thêm SKU ${newVariant.SKU.trim()} vào sản phẩm.`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Không thể thêm SKU.");
+    } finally {
+      setAdding(false);
+    }
+  };
+  const editDraft = (row: VariantRow): VariantDraft =>
+    drafts[row.MaBienThe] || {
+      GiaBan: String(row.GiaBan),
+      GiaNhap: String(row.GiaNhap),
+      TrangThai: Number(row.TrangThai) === 1,
+    };
+  const saveVariant = async (row: VariantRow) => {
+    const draft = editDraft(row);
+    const GiaBan = Number(draft.GiaBan);
+    const GiaNhap = Number(draft.GiaNhap);
+    if (!Number.isFinite(GiaBan) || GiaBan < 0 || !Number.isFinite(GiaNhap) || GiaNhap < 0) {
+      setError(`Giá của SKU ${row.SKU} phải là số không âm.`);
+      return;
+    }
+    setSavingId(row.MaBienThe);
+    setError("");
+    setSuccess("");
+    try {
+      const response = await fetch(`${API}/api/admin/variants/${row.MaBienThe}`, {
+        method: "PUT",
+        headers: headers(),
+        body: JSON.stringify({ GiaBan, GiaNhap, TrangThai: draft.TrangThai ? 1 : 0 }),
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(body?.message || `Không thể lưu SKU ${row.SKU}.`);
+      setRows((current) => current.map((item) =>
+        item.MaBienThe === row.MaBienThe
+          ? { ...item, GiaBan, GiaNhap, TrangThai: draft.TrangThai ? 1 : 0 }
+          : item,
+      ));
+      setDrafts((current) => {
+        const next = { ...current };
+        delete next[row.MaBienThe];
+        return next;
+      });
+      setSuccess(`Đã cập nhật SKU ${row.SKU}.`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Không thể lưu thay đổi SKU.");
+    } finally {
+      setSavingId(null);
     }
   };
   return (
-    <ResourceShell title="Biến thể sản phẩm">
+    <ResourceShell title="Tra cứu & quản lý SKU">
       <div className="variant-layout">
-        <div className="variant-product-picker">
-          <label htmlFor="variant-product">Sản phẩm</label>
-          <select
-            id="variant-product"
-            value={productId}
-            onChange={(event) => setProductId(event.target.value)}
-            disabled={!products.length}
-          >
-            {products.map((product) => (
-              <option
-                key={String(product.MaSanPham)}
-                value={String(product.MaSanPham)}
-              >
-                {String(product.TenSanPham)} · #{String(product.MaSanPham)}
-              </option>
-            ))}
-          </select>
-        </div>
-        <form
-          className="variant-form"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void create();
-          }}
-        >
-          <div className="variant-section-heading">
-            <div>
-              <h2>Thêm biến thể</h2>
-              <p>Tạo SKU mới với tồn kho 0; phiếu nhập được duyệt sẽ cộng tồn.</p>
-            </div>
-          </div>
-          <div className="variant-fields">
-            <label className="variant-field">
-              SKU
-              <input
-                required
-                value={form.SKU}
-                onChange={(event) => setForm({ ...form, SKU: event.target.value })}
-                placeholder="Ví dụ: AO-TRANG-M"
-              />
-            </label>
-            <label className="variant-field">
-              Màu sắc
-              <select
-                value={form.MaMauSac}
-                onChange={(event) => setForm({ ...form, MaMauSac: event.target.value })}
-              >
-                <option value="">Không chọn màu</option>
-                {colors.map((color) => (
-                  <option key={String(color.MaMauSac)} value={String(color.MaMauSac)}>
-                    {String(color.TenMau)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="variant-field">
-              Kích thước
-              <select
-                value={form.MaKichThuoc}
-                onChange={(event) => setForm({ ...form, MaKichThuoc: event.target.value })}
-              >
-                <option value="">Không chọn kích thước</option>
-                {sizes.map((size) => (
-                  <option key={String(size.MaKichThuoc)} value={String(size.MaKichThuoc)}>
-                    {String(size.TenKichThuoc)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="variant-field">
-              Giá bán
-              <input
-                type="number"
-                min="0"
-                value={form.GiaBan}
-                onChange={(event) => setForm({ ...form, GiaBan: event.target.value })}
-              />
-            </label>
-            <label className="variant-field">
-              Giá nhập
-              <input
-                type="number"
-                min="0"
-                value={form.GiaNhap}
-                onChange={(event) => setForm({ ...form, GiaNhap: event.target.value })}
-              />
-            </label>
-          </div>
-          <div className="variant-form-actions">
-            <button className="primary-action" type="submit" disabled={!productId || !form.SKU.trim()}>
-              Thêm biến thể
-            </button>
-          </div>
-        </form>
         <div className="variant-table-heading">
           <div>
-            <h2>Danh sách SKU</h2>
-            <p>Các biến thể của sản phẩm đang chọn</p>
+            <h2>Danh sách SKU toàn hệ thống</h2>
+            <p>Tìm SKU, kiểm tra tồn kho và chỉnh nhanh giá hoặc trạng thái hiển thị.</p>
           </div>
-          <span>{rows.length} biến thể</span>
+          <div className="variant-heading-actions">
+            <span>{filteredRows.length} SKU</span>
+            <button className="primary-action" type="button" disabled={!products.length} onClick={openNewVariant}>
+              + Thêm SKU vào sản phẩm
+            </button>
+          </div>
         </div>
+        <div className="variant-search-bar">
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Tìm mã SKU, tên/mã sản phẩm, màu hoặc kích thước..."
+            aria-label="Tìm kiếm SKU"
+          />
+          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} aria-label="Lọc trạng thái SKU">
+            <option value="ALL">Tất cả trạng thái</option>
+            <option value="1">Đang hiện</option>
+            <option value="0">Đang ẩn</option>
+          </select>
+        </div>
+        {error && <div className="product-status-error" role="alert">{error}</div>}
+        {success && <div className="variant-save-success" role="status">{success}</div>}
         <table className="admin-table">
           <thead>
             <tr>
-              <th>SKU</th>
+              <th>Sản phẩm</th>
+              <th>Mã SKU</th>
               <th>Màu</th>
               <th>Kích thước</th>
               <th>Giá bán</th>
+              <th>Giá nhập</th>
               <th>Tồn kho</th>
-              <th>Trạng thái</th>
+              <th>Hiện / ẩn</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
             {pagination.pageRows.map((row) => (
-              <tr key={String(row.MaBienThe)}>
-                <td><strong>{String(row.SKU)}</strong></td>
+              <tr key={row.MaBienThe}>
+                <td><strong>{row.TenSanPham}</strong><small>{row.MaSanPhamCode}</small></td>
+                <td><strong>{row.SKU}</strong></td>
                 <td>{String(row.TenMau || "-")}</td>
                 <td>{String(row.TenKichThuoc || "-")}</td>
-                <td>{Number(row.GiaBan || 0).toLocaleString("vi-VN")} đ</td>
-                <td>{String(row.SoLuongTon || 0)}</td>
-                <td>{String(row.TrangThai || "-")}</td>
+                <td>
+                  <input className="variant-quick-edit" aria-label={`Giá bán ${row.SKU}`} type="number" min="0" value={editDraft(row).GiaBan} onChange={(event) => setDrafts((current) => ({ ...current, [row.MaBienThe]: { ...editDraft(row), GiaBan: event.target.value } }))} />
+                  {Number(editDraft(row).GiaBan) < Number(editDraft(row).GiaNhap) && (
+                    <small className="variant-price-warning">Giá bán thấp hơn giá nhập</small>
+                  )}
+                </td>
+                <td><input className="variant-quick-edit" aria-label={`Giá nhập ${row.SKU}`} type="number" min="0" value={editDraft(row).GiaNhap} onChange={(event) => setDrafts((current) => ({ ...current, [row.MaBienThe]: { ...editDraft(row), GiaNhap: event.target.value } }))} /></td>
+                <td>{row.SoLuongTon} <small>khả dụng {Math.max(Number(row.SoLuongTon) - Number(row.SoLuongTamGiu), 0)}</small></td>
+                <td><label className="variant-visibility-toggle"><input type="checkbox" checked={editDraft(row).TrangThai} onChange={(event) => setDrafts((current) => ({ ...current, [row.MaBienThe]: { ...editDraft(row), TrangThai: event.target.checked } }))} /><span>{editDraft(row).TrangThai ? "Hiện" : "Ẩn"}</span></label></td>
+                <td><button className="table-action" disabled={savingId === row.MaBienThe} onClick={() => void saveVariant(row)}>{savingId === row.MaBienThe ? "Đang lưu..." : "Lưu"}</button></td>
               </tr>
             ))}
           </tbody>
         </table>
         <PaginationControls {...pagination} onPageChange={pagination.setPage} />
-        {!rows.length && (
-          <div className="variant-empty">Chưa có biến thể cho sản phẩm này.</div>
+        {!loading && !filteredRows.length && (
+          <div className="variant-empty">{rows.length ? "Không tìm thấy SKU phù hợp." : "Chưa có SKU nào. Thêm biến thể từ biểu mẫu tạo sản phẩm."}</div>
+        )}
+        {loading && <div className="variant-empty">Đang tải danh sách SKU...</div>}
+        {newVariant && (
+          <div className="modal-backdrop">
+            <form className="modal-form variant-create-form" onSubmit={(event) => void addVariant(event)}>
+              <button type="button" className="modal-close" onClick={() => setNewVariant(null)} aria-label="Đóng">×</button>
+              <h2>Thêm biến thể / SKU</h2>
+              <p>Thêm SKU mới vào sản phẩm hiện có. Tồn kho ban đầu bằng 0; cập nhật tồn qua phiếu nhập.</p>
+              <label>
+                Sản phẩm
+                <select required value={newVariant.MaSanPham} onChange={(event) => updateNewVariant("MaSanPham", event.target.value)}>
+                  {products.map((product) => (
+                    <option key={product.MaSanPham} value={product.MaSanPham}>
+                      {product.TenSanPham} ({product.MaSanPhamCode})
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Mã SKU
+                <input required maxLength={80} value={newVariant.SKU} onChange={(event) => updateNewVariant("SKU", event.target.value)} placeholder="VD: AO-TRANG-L" />
+              </label>
+              <div className="form-row">
+                <label>
+                  Màu sắc
+                  <select value={newVariant.MaMauSac} onChange={(event) => updateNewVariant("MaMauSac", event.target.value)}>
+                    <option value="">Không chọn</option>
+                    {colors.map((color) => <option key={color.id} value={color.id}>{color.name}</option>)}
+                  </select>
+                </label>
+                <label>
+                  Kích thước
+                  <select value={newVariant.MaKichThuoc} onChange={(event) => updateNewVariant("MaKichThuoc", event.target.value)}>
+                    <option value="">Không chọn</option>
+                    {sizes.map((size) => <option key={size.id} value={size.id}>{size.name}</option>)}
+                  </select>
+                </label>
+              </div>
+              <div className="form-row">
+                <label>
+                  Giá bán
+                  <input required type="number" min="0" value={newVariant.GiaBan} onChange={(event) => updateNewVariant("GiaBan", event.target.value)} />
+                </label>
+                <label>
+                  Giá nhập
+                  <input required type="number" min="0" value={newVariant.GiaNhap} onChange={(event) => updateNewVariant("GiaNhap", event.target.value)} />
+                </label>
+              </div>
+              {Number(newVariant.GiaBan) < Number(newVariant.GiaNhap) && (
+                <p className="price-loss-warning" role="status">Giá bán thấp hơn giá nhập. Bạn vẫn có thể lưu nếu đây là giá xả hàng.</p>
+              )}
+              {error && <div className="product-status-error" role="alert">{error}</div>}
+              <button className="primary-action" disabled={adding || !products.length}>
+                {adding ? "Đang thêm..." : "Thêm SKU"}
+              </button>
+            </form>
+          </div>
         )}
       </div>
     </ResourceShell>

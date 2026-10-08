@@ -23,6 +23,7 @@ router.put('/customers/:id/status', allow('customers'), customer.updateStatus);
 router.get('/products', allow('products'), c.products);
 router.post('/products', allow('products'), c.createProduct);
 router.put('/products/:id', allow('products'), c.updateProduct);
+router.get('/variants', allow('products'), c.allVariants);
 router.get('/products/:productId/variants', allow('products'), c.variants);
 router.post('/products/:productId/variants', allow('products'), c.createVariant);
 router.put('/variants/:id', allow('products'), c.updateVariant);
